@@ -23,7 +23,7 @@ export function PageTabsHeader({ label, tabs, actions }: { label: string; tabs: 
       <nav aria-label={label} className="-mb-px flex items-end gap-6 overflow-x-auto md:gap-10">
         {tabs.map((t) =>
           t.active ? (
-            <span key={t.href} aria-current="page" className="flex items-center gap-2 whitespace-nowrap border-b-2 border-neutral-900 py-3 pr-2 text-sm font-medium md:py-3.5">
+            <span key={t.label} aria-current="page" className="flex items-center gap-2 whitespace-nowrap border-b-2 border-neutral-900 py-3 pr-2 text-sm font-medium md:py-3.5">
               {t.label}
               {t.count !== undefined && (
                 <span className="rounded bg-neutral-700 px-1.5 py-0.5 text-[10px] leading-none font-medium text-white" title={t.countTitle}>
@@ -32,7 +32,7 @@ export function PageTabsHeader({ label, tabs, actions }: { label: string; tabs: 
               )}
             </span>
           ) : (
-            <Link key={t.href} href={t.href} className="whitespace-nowrap border-b-2 border-transparent py-3 text-sm text-neutral-700 hover:text-neutral-900 md:py-3.5">
+            <Link key={t.label} href={t.href} className="whitespace-nowrap border-b-2 border-transparent py-3 text-sm text-neutral-700 hover:text-neutral-900 md:py-3.5">
               {t.label}
             </Link>
           ),
@@ -43,7 +43,7 @@ export function PageTabsHeader({ label, tabs, actions }: { label: string; tabs: 
   );
 }
 
-/** The header of a summary page: "Dashboard" and the current page as tabs, with actions on the right. */
+/** The header of a summary page: the page itself (the default tab), then a Dashboard tab that isn't wired up yet. */
 export function SummaryHeader({
   label,
   count,
@@ -59,8 +59,8 @@ export function SummaryHeader({
     <PageTabsHeader
       label={label}
       tabs={[
-        { href: "/dashboard", label: "Dashboard" },
         { href: "#", label, active: true, count, countTitle },
+        { href: "#", label: "Dashboard" },
       ]}
       actions={actions}
     />
