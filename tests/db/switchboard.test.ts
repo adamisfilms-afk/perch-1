@@ -62,6 +62,11 @@ d("database", () => {
       await db.q(POSTGRES, `update public.settings set value = value || '{"active_rate_pct": 50}' where key = 'client_kpi_targets'`);
     });
 
+    it("pings the app's tick endpoint only from the scheduler, and does nothing until configured", async () => {
+      await expect(db.q(POSTGRES, "select private.ping_app_tick()")).resolves.toHaveLength(1);
+      await expect(db.q(user(admin), "select private.ping_app_tick()")).rejects.toThrow(/permission denied/);
+    });
+
     it("keeps the audit log and finance admin-only", async () => {
       expect(await db.q(user(coordinator), "select * from public.audit_log")).toHaveLength(0);
       expect((await db.q(user(admin), "select * from public.audit_log")).length).toBeGreaterThan(0);

@@ -78,7 +78,7 @@ The database tests build a throwaway database, apply every migration and act as 
 
 1. **Supabase**: create a project in **Sydney (ap-southeast-2)**. Enable point-in-time recovery. Link it and run `npx supabase db push`. Turn on pg_cron (the migration schedules the daily and offer jobs).
 2. **Auth settings**: disable self sign-up; enable TOTP MFA; set the Site URL; set up custom SMTP; change the **Invite** and **Reset password** email templates to link to `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite` (or `type=recovery`).
-3. **Vercel**: import the repo, region `syd1` (set in `vercel.json`), add the variables from `.env.example`. `vercel.json` schedules `/api/cron/tick` every 5 minutes and `/api/cron/daily` each morning.
+3. **Vercel**: import the repo, region `syd1` (set in `vercel.json`), add the variables from `.env.example`. `vercel.json` schedules `/api/cron/daily` each morning (daily is all Vercel's Hobby plan allows). Supabase calls `/api/cron/tick` every 5 minutes: in the Supabase dashboard (Integrations → Vault) add `switchboard_app_url` (your site address) and `switchboard_cron_secret` (the same value as `CRON_SECRET`).
 4. **Cal.com**: add a webhook to the intake, screening and each clinician's intro event type pointing at `/api/webhooks/calcom`, with the shared secret. Booking links the app sends carry `metadata[family_id]` / `metadata[match_id]` so bookings match up; email is the fallback.
 5. **Documenso**: create the agreement template with one recipient; set the webhook (`DOCUMENT_COMPLETED`) to `/api/webhooks/documenso` with the secret.
 6. **First admin**: invite yourself from the Supabase dashboard, then insert your `profiles` row with role `admin`. Invite everyone else from **Settings**.
