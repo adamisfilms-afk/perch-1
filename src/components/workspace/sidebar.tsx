@@ -6,9 +6,10 @@ import { cn } from "../ui";
 import { FolderIcon, GridIcon, PersonIcon } from "./icons";
 
 const LINKS = [
-  { href: "/clients", label: "Clients", icon: FolderIcon },
-  { href: "/clinicians", label: "Clinicians", icon: PersonIcon },
-  { href: "/dashboard", label: "Dashboards", icon: GridIcon },
+  // A client's full record lives at /families/[id].
+  { href: "/clients", label: "Clients", icon: FolderIcon, also: "/families/" },
+  { href: "/clinicians", label: "Clinicians", icon: PersonIcon, also: null },
+  { href: "/dashboard", label: "Dashboards", icon: GridIcon, also: null },
 ];
 
 export function Sidebar({ name, role }: { name: string; role: string }) {
@@ -23,8 +24,8 @@ export function Sidebar({ name, role }: { name: string; role: string }) {
       </div>
       <nav aria-label="Main" className="overflow-x-auto px-3 md:px-6">
         <ul className="flex gap-1 md:flex-col md:gap-0.5">
-          {LINKS.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href || pathname.startsWith(`${href}/`);
+          {LINKS.map(({ href, label, icon: Icon, also }) => {
+            const active = pathname === href || pathname.startsWith(`${href}/`) || (!!also && pathname.startsWith(also));
             return (
               <li key={href}>
                 <Link

@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { SimpleActionButton } from "@/components/forms";
 import { FirstSessionForm, IntroOutcomeForm } from "@/components/referral-forms";
 import { notFound } from "next/navigation";
-import { DateOnly, FamilyStatusBadge, MatchStateBadge, When } from "@/components/display";
-import { Alert, Badge, Card, CardTitle, DefinitionList, EmptyState, PageHeader } from "@/components/ui";
+import { DateOnly, MatchStateBadge, When } from "@/components/display";
+import { Alert, Badge, Card, CardTitle, DefinitionList, EmptyState } from "@/components/ui";
+import { RecordHeader } from "@/components/workspace/summary-parts";
 import { requireStaff } from "@/lib/auth";
 import { allocationBlockedReason, childFullName } from "@/lib/client-summary";
 import {
@@ -21,6 +21,9 @@ import { formatAuMobile } from "@/lib/phone";
 import { createClient } from "@/lib/supabase/server";
 import { ageFrom, relativeHours, hoursSince, todayInAustralia } from "@/lib/time";
 import { firstOf, type ChildRow, type FamilyRow, type MatchRow, type StatusHistoryRow } from "@/lib/types";
+import { getClientDetail } from "../../clients/actions";
+import { CLIENT_TABS, ClientBookings, ClientHistory } from "../../clients/client-detail";
+import { StatusPill } from "../../clients/client-table";
 import * as actions from "./actions";
 import { ChildForm, FamilyDetailsForm, IntakeForm, StatusForm } from "./family-forms";
 
@@ -38,12 +41,51 @@ const NOTICES: Record<string, string> = {
   status: "Status updated.",
 };
 
+const TABS = [{ id: "overview", label: "Overview" }, ...CLIENT_TABS.filter((t) => t.id !== "info")];
+
+function Header({ family, childNames, tab }: { family: FamilyRow; childNames: string; tab: string }) {
+  return (
+    <RecordHeader
+      back={{ href: "/clients", label: "Clients" }}
+      title={childNames || family.parent_name}
+      subtitle={
+        <span className="flex flex-wrap items-center gap-2">
+          <span>Parent: {family.parent_name} ·</span>
+          <StatusPill status={family.status} />
+          <span>
+            for {relativeHours(hoursSince(family.status_changed_at))}
+            {family.status_reason && ` · ${family.status_reason}`}
+          </span>
+          {family.complex_case && <Badge tone="violet">Complex case</Badge>}
+        </span>
+      }
+      tabs={TABS}
+      active={tab}
+      basePath={`/families/${family.id}`}
+    />
+  );
+}
+
 export default async function FamilyPage({ params, searchParams }: PageProps<"/families/[id]">) {
   const viewer = await requireStaff();
   const { id } = await params;
-  const { notice } = await searchParams;
-  const supabase = await createClient();
+  const { notice, tab: tabParam } = await searchParams;
+  const tab = TABS.some((t) => t.id === tabParam) ? (tabParam as string) : "overview";
 
+  // Bookings and History show the same views as the client summary modal (which logs the view itself).
+  if (tab !== "overview") {
+    const result = await getClientDetail(id);
+    if (!result.ok) notFound();
+    const { detail } = result;
+    return (
+      <div className="flex min-h-full flex-col">
+        <Header family={detail.family} childNames={detail.children.map(childFullName).join(" & ")} tab={tab} />
+        <div className="max-w-3xl px-4 py-6 md:px-8">{tab === "bookings" ? <ClientBookings detail={detail} /> : <ClientHistory detail={detail} />}</div>
+      </div>
+    );
+  }
+
+  const supabase = await createClient();
   const { data: family } = await supabase.from("families").select("*").eq("id", id).maybeSingle<FamilyRow>();
   if (!family) notFound();
   await supabase.rpc("log_access", { p_entity_type: "families", p_entity_id: id, p_action: "view" });
@@ -74,7 +116,6 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
   const matches = (matchRows ?? []) as unknown as MatchWithClinician[];
   const names = new Map((people ?? []).map((p: { id: string; full_name: string }) => [p.id, p.full_name]));
   const today = todayInAustralia();
-  const hours = hoursSince(family.status_changed_at);
 
   const inIntake = ["new", "contacted", "intake_booked", "intake_done"].includes(family.status);
   const accepted = matches.find((m) => m.state === "accepted");
@@ -87,25 +128,9 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
     | undefined;
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={
-          <span className="flex flex-wrap items-center gap-2">
-            {children.map(childFullName).join(" & ")} <span className="font-normal text-stone-500">· {family.parent_name}</span>
-          </span>
-        }
-        description={
-          <span className="flex flex-wrap items-center gap-2">
-            <FamilyStatusBadge status={family.status} />
-            <span>
-              for {relativeHours(hours)}
-              {family.status_reason && ` · ${family.status_reason}`}
-            </span>
-            {family.complex_case && <Badge tone="violet">Complex case</Badge>}
-          </span>
-        }
-        actions={<Link href="/families" className="text-sm text-brand-700 underline">← All families</Link>}
-      />
+    <div className="flex min-h-full flex-col">
+      <Header family={family} childNames={children.map(childFullName).join(" & ")} tab="overview" />
+      <div className="space-y-6 px-4 py-6 md:px-8">
 
       {typeof notice === "string" && NOTICES[notice] && <Alert tone="green">{NOTICES[notice]}</Alert>}
 
@@ -283,6 +308,7 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
             </ul>
           </Card>
         </div>
+      </div>
       </div>
     </div>
   );
