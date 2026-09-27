@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { DateOnly, FamilyStatusBadge, MatchStateBadge, When } from "@/components/display";
 import { Alert, Badge, Card, CardTitle, DefinitionList, EmptyState, PageHeader } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
-import { childFullName } from "@/lib/client-summary";
+import { allocationBlockedReason, childFullName } from "@/lib/client-summary";
 import {
   CONCERN_LABELS,
   FAMILY_STATUS_LABELS,
@@ -16,35 +16,23 @@ import {
   TIME_BLOCK_LABELS,
   type Concern,
 } from "@/lib/domain";
-import { FILTER_LABELS, runMatching } from "@/lib/matching";
+import { AllocateClinician } from "@/components/workspace/allocate-clinician";
 import { formatAuMobile } from "@/lib/phone";
-import { loadMatchClinicians, toMatchChild, toMatchFamily } from "@/lib/server/matching-data";
 import { createClient } from "@/lib/supabase/server";
 import { ageFrom, relativeHours, hoursSince, todayInAustralia } from "@/lib/time";
 import { firstOf, type ChildRow, type FamilyRow, type MatchRow, type StatusHistoryRow } from "@/lib/types";
 import * as actions from "./actions";
-import {
-  ChildForm,
-  FamilyDetailsForm,
-  IntakeForm,
-  ShortlistForm,
-  StatusForm,
-  WithdrawForm,
-} from "./family-forms";
+import { ChildForm, FamilyDetailsForm, IntakeForm, StatusForm } from "./family-forms";
 
 export const metadata = { title: "Family" };
 
 type MatchWithClinician = MatchRow & { clinicians: { name: string } | null; intro_calls: { scheduled_at: string | null; outcome: string | null }[]; conversions: { first_session_at: string } | { first_session_at: string }[] | null };
 
 const NOTICES: Record<string, string> = {
-  intake_ready_to_match: "Intake saved. The family is ready to match: pick a shortlist below.",
+  intake_ready_to_match: "Intake saved. The family is ready to match: allocate a clinician below.",
   intake_needs_follow_up: "Intake saved. The family is back in Contacted for follow-up.",
   intake_not_suitable: "Intake saved. The family has been sent the signposting message.",
-  shortlist: "Shortlist saved. Approve it to send the first offer.",
-  shortlist_complex: "Shortlist saved. A clinical lead needs to approve it.",
-  approved: "Approved. The first offer has been sent.",
   waitlist: "Moved to the waitlist. You'll be alerted when capacity frees up.",
-  withdrawn: "Offer withdrawn. The next clinician on the shortlist (if any) has been offered.",
   intro: "Intro call outcome saved.",
   converted: "First session confirmed. The family is converted 🎉",
   status: "Status updated.",
@@ -89,9 +77,6 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
   const hours = hoursSince(family.status_changed_at);
 
   const inIntake = ["new", "contacted", "intake_booked", "intake_done"].includes(family.status);
-  const canMatch = ["ready_to_match", "waitlist"].includes(family.status);
-  const proposed = matches.filter((m) => m.state === "proposed" && child && m.child_id === child.id);
-  const offered = matches.filter((m) => m.state === "offered");
   const accepted = matches.find((m) => m.state === "accepted");
   const manualOptions = MANUAL_FAMILY_STATUSES.filter((s) => FAMILY_TRANSITIONS[family.status].includes(s) || viewer.role === "admin").filter(
     (s) => s !== family.status,
@@ -100,11 +85,6 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
   const nextIntake = intake?.find((i: { completed_at: string | null; scheduled_at: string | null }) => !i.completed_at && i.scheduled_at) as
     | { scheduled_at: string }
     | undefined;
-
-  let matching: ReturnType<typeof runMatching> | null = null;
-  if (child && canMatch && proposed.length === 0) {
-    matching = runMatching(toMatchChild(child), toMatchFamily(family), await loadMatchClinicians(supabase), { today, suburb: family.suburb });
-  }
 
   return (
     <div className="space-y-6">
@@ -128,7 +108,6 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
       />
 
       {typeof notice === "string" && NOTICES[notice] && <Alert tone="green">{NOTICES[notice]}</Alert>}
-      {family.lat === null && <Alert>This suburb isn&apos;t on the map yet, so matching can only use clinicians&apos; suburb lists. Check the suburb and postcode below.</Alert>}
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-6">
@@ -144,94 +123,18 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
             </Card>
           )}
 
-          {child && (canMatch || proposed.length > 0 || offered.length > 0) && (
+          {child && (
             <Card>
-              <CardTitle>Matching</CardTitle>
-              {proposed.length > 0 && offered.length === 0 && (
-                <div className="space-y-3">
-                  <p className="text-sm text-stone-700">
-                    Shortlist waiting for approval. Offers go out {proposed.length > 1 ? "in this order" : "to this clinician"}; declines and
-                    timeouts move to the next automatically.
-                  </p>
-                  <ol className="list-decimal space-y-1 pl-5 text-sm">
-                    {proposed
-                      .sort((a, b) => a.rank - b.rank)
-                      .map((m) => (
-                        <li key={m.id}>
-                          {m.clinicians?.name} · score {m.rule_score} · {m.distance_km ?? "?"} km {m.approved_at && <Badge tone="green">approved</Badge>}
-                        </li>
-                      ))}
-                  </ol>
-                  {family.complex_case && viewer.role === "coordinator" ? (
-                    <Alert tone="blue">Complex case: a clinical lead needs to approve this shortlist.</Alert>
-                  ) : (
-                    <SimpleActionButton action={actions.approveShortlist.bind(null, family.id, child.id)} label="Approve and send the first offer" />
-                  )}
-                </div>
-              )}
-              {offered.length > 0 && (
-                <ul className="space-y-3">
-                  {offered.map((m) => (
-                    <li key={m.id} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
-                      <p>
-                        Offered to <strong>{m.clinicians?.name}</strong>, closes <When at={m.offer_expires_at} uk={viewer.showUkTime} />
-                      </p>
-                      <div className="mt-2">
-                        <WithdrawForm action={actions.withdrawOffer.bind(null, family.id, m.id)} />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {matching && (
-                <div className="space-y-4">
-                  {matching.warnings.map((w) => (
-                    <Alert key={w}>{w}</Alert>
-                  ))}
-                  {matching.shortlist.length > 0 ? (
-                    <>
-                      <p className="text-sm text-stone-700">
-                        These clinicians pass every rule, best first. Tick who should be on the shortlist. A person approves before anything is sent.
-                      </p>
-                      <ShortlistForm
-                        action={actions.proposeShortlist.bind(null, family.id, child.id)}
-                        options={matching.shortlist.map((c) => ({
-                          id: c.clinician.id,
-                          name: c.clinician.name,
-                          score: c.score,
-                          distance: c.distance_km === null ? "distance n/a" : `${c.distance_km.toFixed(1)} km`,
-                          notes: c.notes,
-                          breakdown: c.breakdown as unknown as Record<string, number>,
-                        }))}
-                      />
-                    </>
-                  ) : (
-                    <div className="space-y-3">
-                      <Alert tone="amber">{matching.waitlist?.reason ?? "Nobody passes the matching rules."}</Alert>
-                      {family.status !== "waitlist" && (
-                        <SimpleActionButton action={actions.moveToWaitlist.bind(null, family.id, child.id)} label="Move to waitlist" variant="secondary" />
-                      )}
-                    </div>
-                  )}
-                  {matching.rejected.length > 0 && (
-                    <details className="text-sm">
-                      <summary className="cursor-pointer text-brand-700">Why others were ruled out ({matching.rejected.length})</summary>
-                      <ul className="mt-2 space-y-1">
-                        {matching.rejected
-                          .sort((a, b) => a.failed.length - b.failed.length)
-                          .slice(0, 30)
-                          .map((r) => (
-                            <li key={r.clinician.id}>
-                              <Link href={`/clinicians/${r.clinician.id}`} className="underline">
-                                {r.clinician.name}
-                              </Link>
-                              : {r.failed.map((f) => FILTER_LABELS[f]).join(", ")}
-                              {r.distance_km !== null && ` (${r.distance_km.toFixed(1)} km)`}
-                            </li>
-                          ))}
-                      </ul>
-                    </details>
-                  )}
+              <CardTitle>Clinician</CardTitle>
+              <AllocateClinician
+                familyId={family.id}
+                current={accepted ? { id: accepted.clinician_id, name: accepted.clinicians?.name ?? "Clinician" } : null}
+                blockedReason={allocationBlockedReason(family.status)}
+              />
+              {family.status === "ready_to_match" && (
+                <div className="mt-4 border-t border-stone-100 pt-4">
+                  <p className="mb-2 text-sm text-stone-600">No clinician available yet?</p>
+                  <SimpleActionButton action={actions.moveToWaitlist.bind(null, family.id)} label="Move to waitlist" variant="secondary" />
                 </div>
               )}
             </Card>
@@ -239,10 +142,10 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
 
           {accepted && (
             <Card>
-              <CardTitle>Matched with {accepted.clinicians?.name}</CardTitle>
+              <CardTitle>Intro and first session with {accepted.clinicians?.name}</CardTitle>
               <DefinitionList
                 items={[
-                  ["Accepted", <When key="a" at={accepted.responded_at} uk={viewer.showUkTime} />],
+                  ["Allocated", <When key="a" at={accepted.responded_at} uk={viewer.showUkTime} />],
                   ["Intro call", accepted.intro_calls[0]?.scheduled_at ? <When key="i" at={accepted.intro_calls[0].scheduled_at} uk={viewer.showUkTime} /> : "Not booked yet"],
                   ["Intro outcome", accepted.intro_calls.find((c) => c.outcome)?.outcome?.replaceAll("_", " ")],
                   ["First session", <DateOnly key="f" date={firstOf(accepted.conversions)?.first_session_at} />],
@@ -283,9 +186,9 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
           ))}
 
           <Card>
-            <CardTitle>Referral history</CardTitle>
+            <CardTitle>Clinician history</CardTitle>
             {matches.length === 0 ? (
-              <EmptyState>No offers yet.</EmptyState>
+              <EmptyState>No clinician allocated yet.</EmptyState>
             ) : (
               <ul className="divide-y divide-stone-100 text-sm">
                 {matches.map((m) => (

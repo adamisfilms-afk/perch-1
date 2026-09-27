@@ -266,6 +266,62 @@ d("database", () => {
     });
   });
 
+  describe("clinician allocation", () => {
+    it("allocates a clinician directly and emails the family and the clinician", async () => {
+      const a = await db.createActiveClinician({ name: "Ava Allocated", capacity: 2 });
+      const { familyId, childId } = await db.createReadyFamily();
+      await db.q(user(coordinator), "select public.allocate_clinician($1, $2)", [familyId, a.clinicianId]);
+
+      expect(await db.matchStates(childId)).toEqual({ [a.clinicianId]: "accepted" });
+      expect(await db.familyStatus(familyId)).toBe("accepted");
+      const [c] = await db.q<{ capacity_new: number }>(POSTGRES, "select capacity_new from public.clinicians where id = $1", [a.clinicianId]);
+      expect(c.capacity_new).toBe(1);
+      const sent = await db.q<{ template: string }>(
+        POSTGRES,
+        "select distinct template from public.message_log where template in ('match_confirmed', 'clinician_allocated') and (recipient_id = $1 or recipient_id = $2) order by template",
+        [familyId, a.clinicianId],
+      );
+      expect(sent.map((m) => m.template)).toEqual(["clinician_allocated", "match_confirmed"]);
+      // the clinician can now see the family
+      expect(await db.q(user(a.userId), "select id from public.families where id = $1", [familyId])).toHaveLength(1);
+    });
+
+    it("changes the clinician, returning the place and telling the first clinician", async () => {
+      const a = await db.createActiveClinician({ name: "First Pick", capacity: 2 });
+      const b = await db.createActiveClinician({ name: "Second Pick", capacity: 2 });
+      const { familyId, childId } = await db.createReadyFamily();
+      await db.q(user(coordinator), "select public.allocate_clinician($1, $2)", [familyId, a.clinicianId]);
+      await db.q(user(coordinator), "select public.allocate_clinician($1, $2)", [familyId, b.clinicianId]);
+
+      expect(await db.matchStates(childId)).toEqual({ [a.clinicianId]: "withdrawn", [b.clinicianId]: "accepted" });
+      expect(await db.familyStatus(familyId)).toBe("accepted");
+      const caps = await db.q<{ id: string; capacity_new: number }>(POSTGRES, "select id, capacity_new from public.clinicians where id = any($1)", [[a.clinicianId, b.clinicianId]]);
+      expect(Object.fromEntries(caps.map((c) => [c.id, c.capacity_new]))).toEqual({ [a.clinicianId]: 2, [b.clinicianId]: 1 });
+      const removed = await db.q(POSTGRES, "select 1 from public.message_log where template = 'allocation_removed' and recipient_id = $1", [a.clinicianId]);
+      expect(removed).toHaveLength(1);
+      await expect(db.q(user(coordinator), "select public.allocate_clinician($1, $2)", [familyId, b.clinicianId])).rejects.toThrow(/already allocated/);
+    });
+
+    it("won't allocate before the sign-up call, to an inactive clinician, or by a clinician", async () => {
+      const a = await db.createActiveClinician();
+      const early = await db.submitEnquiry();
+      await expect(db.q(user(coordinator), "select public.allocate_clinician($1, $2)", [early, a.clinicianId])).rejects.toThrow(/sign-up call/);
+
+      const { familyId } = await db.createReadyFamily();
+      await expect(db.q(user(a.userId), "select public.allocate_clinician($1, $2)", [familyId, a.clinicianId])).rejects.toThrow();
+      await db.q(POSTGRES, "update public.clinicians set status = 'paused', pause_reason = 'clinician_request' where id = $1", [a.clinicianId]);
+      await expect(db.q(user(coordinator), "select public.allocate_clinician($1, $2)", [familyId, a.clinicianId])).rejects.toThrow(/active/);
+    });
+
+    it("needs a clinical lead to allocate a complex case", async () => {
+      const a = await db.createActiveClinician();
+      const { familyId } = await db.createReadyFamily({ complex: true });
+      await expect(db.q(user(coordinator), "select public.allocate_clinician($1, $2)", [familyId, a.clinicianId])).rejects.toThrow(/clinical lead/);
+      await db.q(user(lead), "select public.allocate_clinician($1, $2)", [familyId, a.clinicianId]);
+      expect(await db.familyStatus(familyId)).toBe("accepted");
+    });
+  });
+
   describe("referral offers", () => {
     it("offers one clinician at a time and moves down the shortlist on decline and timeout", async () => {
       const a = await db.createActiveClinician({ name: "First" });

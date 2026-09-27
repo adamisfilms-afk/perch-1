@@ -1,6 +1,6 @@
 // Client summary: the families list, the top-line KPIs and their targets.
 // Pure functions, so they can be unit tested and shared by the server page and the client table.
-import { FAMILY_STATUS_LABELS, type FamilyStatus, type FundingType } from "./domain";
+import { ALLOCATABLE_STATUSES, FAMILY_STATUS_LABELS, type FamilyStatus, type FundingType } from "./domain";
 import { AU_TZ } from "./time";
 
 /** Order used when sorting by status: the funnel first, the waitlist next to matching, exits last. */
@@ -27,6 +27,14 @@ export const CLIENT_STATUS_LABELS: Record<FamilyStatus, string> = {
   accepted: "Matched",
   converted: "Active",
 };
+
+/** Why a clinician can't be allocated to a client at this step, or null when they can. */
+export function allocationBlockedReason(status: FamilyStatus): string | null {
+  if (ALLOCATABLE_STATUSES.includes(status)) return null;
+  if (status === "converted") return "This client is active with their clinician.";
+  if (["lost", "not_suitable", "withdrawn"].includes(status)) return "Reopen this client (set them back to Contacted) before allocating a clinician.";
+  return "Complete the sign-up call first: save the intake on the full record.";
+}
 
 /** Statuses with no next step, so no time is counted. */
 export const SETTLED_STATUSES: FamilyStatus[] = ["converted", "lost", "not_suitable", "withdrawn"];

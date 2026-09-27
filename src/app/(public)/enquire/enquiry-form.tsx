@@ -4,6 +4,8 @@ import Link from "next/link";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Card, Checkbox, CheckboxGroup, Field, Input, Select } from "@/components/ui";
 import {
+  AU_STATE_LABELS,
+  AU_STATES,
   CONCERN_LABELS,
   ENQUIRY_CONCERNS,
   FUNDING_LABELS,
@@ -38,9 +40,19 @@ export function EnquiryForm() {
                 <Input name="mobile" type="tel" autoComplete="tel" inputMode="tel" placeholder="0412 345 678" defaultValue={str(v.mobile)} error={e.mobile} />
               </Field>
             </div>
-            <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
+            <div className="grid gap-4 sm:grid-cols-[2fr_1fr_1fr]">
               <Field label="Suburb" name="suburb" required error={e.suburb}>
                 <Input name="suburb" autoComplete="address-level2" defaultValue={str(v.suburb)} error={e.suburb} />
+              </Field>
+              <Field label="State" name="state" required error={e.state}>
+                <Select
+                  name="state"
+                  autoComplete="address-level1"
+                  placeholder="Choose…"
+                  options={AU_STATES.map((s) => [s, AU_STATE_LABELS[s]] as const)}
+                  defaultValue={str(v.state) ?? ""}
+                  error={e.state}
+                />
               </Field>
               <Field label="Postcode" name="postcode" required error={e.postcode}>
                 <Input name="postcode" inputMode="numeric" autoComplete="postal-code" maxLength={4} defaultValue={str(v.postcode)} error={e.postcode} />

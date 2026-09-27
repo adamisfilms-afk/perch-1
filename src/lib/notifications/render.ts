@@ -58,7 +58,6 @@ export function buildVariables(payload: Record<string, unknown>, links: LinkConf
   if (payload.service_type) v.service_label = SERVICE_LABELS[payload.service_type as ServiceType] ?? payload.service_type;
   if (payload.pause_reason) v.pause_label = PAUSE_LABELS[payload.pause_reason as PauseReason] ?? payload.pause_reason;
   if (payload.profession) v.profession_label = PROFESSION_LABELS[payload.profession as Profession] ?? payload.profession;
-  if (payload.geocoded === false) v.geocode_note = "⚠ The suburb couldn't be placed on the map: check it before matching.";
   if (typeof payload.starts_at === "string") v.starts_at_local = formatDateTime(payload.starts_at);
   if (typeof payload.offer_expires_at === "string") v.offer_expires_at_local = formatDateTime(payload.offer_expires_at);
   if (typeof payload.expires_at === "string") v.expires_at_local = formatDate(payload.expires_at);

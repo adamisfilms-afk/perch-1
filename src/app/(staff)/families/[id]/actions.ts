@@ -5,14 +5,10 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import type { ActionState } from "@/components/forms";
 import { friendlyError, requireStaff } from "@/lib/auth";
-import { CONCERNS, FAMILY_STATUSES, FUNDING_TYPES, SERVICE_TYPES, TIME_BLOCKS, type FamilyStatus } from "@/lib/domain";
-import { geocodeSuburb, stateFromPostcode } from "@/lib/geo";
-import { runMatching } from "@/lib/matching";
+import { AU_STATES, CONCERNS, FAMILY_STATUSES, FUNDING_TYPES, SERVICE_TYPES, TIME_BLOCKS, type FamilyStatus } from "@/lib/domain";
 import { drainOutboxQuietly } from "@/lib/notifications/outbox";
 import { normaliseAuMobile } from "@/lib/phone";
-import { loadMatchClinicians, toMatchChild, toMatchFamily } from "@/lib/server/matching-data";
 import { createClient } from "@/lib/supabase/server";
-import { todayInAustralia } from "@/lib/time";
 import type { ChildRow, FamilyRow } from "@/lib/types";
 
 const text = (fd: FormData, k: string) => {
@@ -48,6 +44,8 @@ export async function updateFamily(familyId: string, _prev: ActionState, fd: For
   const suburb = text(fd, "suburb");
   const funding = String(fd.get("funding_type"));
   if (!suburb || !(FUNDING_TYPES as readonly string[]).includes(funding)) return { error: "Suburb and funding are required" };
+  const state = String(fd.get("state") ?? "");
+  if (!(AU_STATES as readonly string[]).includes(state)) return { error: "Choose a state" };
 
   const update: Partial<FamilyRow> = {
     parent_name: text(fd, "parent_name") ?? current.parent_name,
@@ -55,19 +53,14 @@ export async function updateFamily(familyId: string, _prev: ActionState, fd: For
     mobile,
     suburb,
     postcode,
+    state,
     funding_type: funding as FamilyRow["funding_type"],
     plan_manager: text(fd, "plan_manager"),
     complex_case: fd.get("complex_case") === "on",
   };
-  if (suburb !== current.suburb || postcode !== current.postcode || current.lat === null) {
-    const geo = await geocodeSuburb(suburb, postcode);
-    update.lat = geo?.lat ?? null;
-    update.lng = geo?.lng ?? null;
-    update.state = geo?.state ?? stateFromPostcode(postcode);
-  }
   const { error } = await supabase.from("families").update(update).eq("id", familyId);
   if (error) return { error: friendlyError(error) };
-  return done(familyId, update.lat === null && current.lat !== null ? "Saved, but the new suburb couldn't be placed on the map" : "Saved");
+  return done(familyId, "Saved");
 }
 
 function childFields(fd: FormData): Partial<ChildRow> {
@@ -157,69 +150,12 @@ export async function completeIntake(familyId: string, childId: string, _prev: A
   doneAndShow(familyId, `intake_${outcome}`);
 }
 
-/** Saves the coordinator's picks as the shortlist. Scores are recalculated here, never taken from the browser. */
-export async function proposeShortlist(familyId: string, childId: string, _prev: ActionState, fd: FormData): Promise<ActionState> {
-  await requireStaff();
-  const picked = list(fd, "clinician_id");
-  if (!picked.length) return { error: "Tick at least one clinician" };
-  const supabase = await createClient();
-  const [{ data: family }, { data: child }] = await Promise.all([
-    supabase.from("families").select("*").eq("id", familyId).single<FamilyRow>(),
-    supabase.from("children").select("*").eq("id", childId).single<ChildRow>(),
-  ]);
-  if (!family || !child) return { error: "Family not found" };
-  const clinicians = await loadMatchClinicians(supabase);
-  const result = runMatching(toMatchChild(child), toMatchFamily(family), clinicians, { today: todayInAustralia(), limit: 50 });
-  const byId = new Map(result.shortlist.map((c) => [c.clinician.id, c]));
-  const missing = picked.filter((id) => !byId.has(id));
-  if (missing.length) return { error: "Someone you picked no longer passes the matching rules. Refresh and try again." };
-
-  const items = picked
-    .map((id) => byId.get(id)!)
-    .sort((a, b) => b.score - a.score)
-    .map((c, i) => ({
-      clinician_id: c.clinician.id,
-      rank: i + 1,
-      rule_score: c.score,
-      score_breakdown: c.breakdown,
-      distance_km: c.distance_km === null ? null : Math.round(c.distance_km * 10) / 10,
-    }));
-  const { error } = await supabase.rpc("propose_shortlist", { p_child: childId, p_items: items });
-  if (error) return { error: friendlyError(error) };
-  doneAndShow(familyId, family.complex_case ? "shortlist_complex" : "shortlist");
-}
-
-export async function approveShortlist(familyId: string, childId: string, _prev: ActionState, _fd: FormData): Promise<ActionState> {
+/** For when no clinician can take the family yet. Allocating a clinician later moves them straight on. */
+export async function moveToWaitlist(familyId: string, _prev: ActionState, _fd: FormData): Promise<ActionState> {
   void _fd;
   await requireStaff();
   const supabase = await createClient();
-  const { error } = await supabase.rpc("approve_shortlist", { p_child: childId });
-  if (error) return { error: friendlyError(error) };
-  doneAndShow(familyId, "approved");
-}
-
-export async function withdrawOffer(familyId: string, matchId: string, _prev: ActionState, fd: FormData): Promise<ActionState> {
-  await requireStaff();
-  const reason = text(fd, "reason") ?? "Withdrawn by coordinator";
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("withdraw_offer", { p_match: matchId, p_reason: reason });
-  if (error) return { error: friendlyError(error) };
-  doneAndShow(familyId, "withdrawn");
-}
-
-export async function moveToWaitlist(familyId: string, childId: string, _prev: ActionState, _fd: FormData): Promise<ActionState> {
-  void _fd;
-  await requireStaff();
-  const supabase = await createClient();
-  const [{ data: family }, { data: child }] = await Promise.all([
-    supabase.from("families").select("*").eq("id", familyId).single<FamilyRow>(),
-    supabase.from("children").select("*").eq("id", childId).single<ChildRow>(),
-  ]);
-  if (!family || !child) return { error: "Family not found" };
-  const clinicians = await loadMatchClinicians(supabase);
-  const result = runMatching(toMatchChild(child), toMatchFamily(family), clinicians, { today: todayInAustralia(), suburb: family.suburb });
-  const reason = result.waitlist?.reason ?? "Coordinator moved to waitlist";
-  const { error } = await supabase.rpc("set_waitlist", { p_family: familyId, p_reason: reason, p_codes: result.waitlist?.codes ?? [] });
+  const { error } = await supabase.rpc("set_waitlist", { p_family: familyId, p_reason: "No clinician available yet", p_codes: [] });
   if (error) return { error: friendlyError(error) };
   doneAndShow(familyId, "waitlist");
 }
