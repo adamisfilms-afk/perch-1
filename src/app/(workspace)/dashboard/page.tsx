@@ -72,11 +72,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
     <div className="flex min-h-full flex-col">
       <PageTabsHeader
         label="Dashboard"
-        tabs={[
-          { href: "/dashboard", label: "Dashboard", active: true },
-          { href: "/clients", label: "Client Summary" },
-          { href: "/clinicians", label: "Clinician Summary" },
-        ]}
+        tabs={[{ href: "/dashboard", label: "Dashboard", active: true }]}
         actions={
           <nav aria-label="Period" className="flex rounded-md border border-neutral-200 p-0.5 text-sm">
             {PERIODS.map((d) => (
