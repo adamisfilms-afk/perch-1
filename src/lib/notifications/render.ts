@@ -24,6 +24,8 @@ export function renderTemplate(template: string, vars: Record<string, unknown>):
 export interface LinkConfig {
   appUrl: string;
   intakeBookingUrl: string;
+  /** Cal.com event clinicians book their intake (screening) call on. */
+  clinicianIntakeBookingUrl: string;
 }
 
 /** Adds links and friendly labels to the values stored with the message. */
@@ -39,6 +41,17 @@ export function buildVariables(payload: Record<string, unknown>, links: LinkConf
     // Cal.com passes metadata back in its webhook, so the booking links to the right family.
     url.searchParams.set("metadata[family_id]", payload.family_id);
     v.intake_booking_url = url.toString();
+  }
+  if (typeof payload.clinician_id === "string" && typeof payload.clinician_name === "string") {
+    const url = new URL(links.clinicianIntakeBookingUrl);
+    url.searchParams.set("name", payload.clinician_name);
+    // Cal.com passes this back, so the booking moves the right clinician to Intake call booked.
+    url.searchParams.set("metadata[clinician_id]", payload.clinician_id);
+    v.screening_booking_url = url.toString();
+  }
+  if (typeof payload.portal_token_hash === "string") {
+    const type = payload.portal_link_type === "recovery" ? "recovery" : "invite";
+    v.portal_invite_url = `${links.appUrl}/auth/confirm?token_hash=${encodeURIComponent(payload.portal_token_hash)}&type=${type}`;
   }
   if (typeof payload.match_id === "string") {
     v.offer_url = `${links.appUrl}/portal/offers/${payload.match_id}`;

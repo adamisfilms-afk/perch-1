@@ -105,6 +105,8 @@ export interface ClinicianRow {
   application: Record<string, unknown>;
   screening_notes: string | null;
   last_recredentialed_at: string | null;
+  application_submitted_at: string | null;
+  intake_completed_at: string | null;
   created_at: string;
 }
 

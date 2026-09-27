@@ -5,6 +5,7 @@ import { requireClinician } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { daysUntil, todayInAustralia } from "@/lib/time";
 import type { ClinicianRow, CredentialRow, OfferSummary } from "@/lib/types";
+import { ApplicationCard } from "./application-card";
 import { OfferCard } from "./offer-card";
 
 export const metadata = { title: "Home" };
@@ -13,12 +14,14 @@ export default async function PortalHome() {
   const viewer = await requireClinician();
   const supabase = await createClient();
   const today = todayInAustralia();
-  const [{ data: me }, { data: offers }, { data: creds }, { count: active }] = await Promise.all([
+  const [{ data: me }, { data: offers }, { data: creds }, { count: active }, { data: gaps }] = await Promise.all([
     supabase.from("clinicians").select("*").eq("id", viewer.clinicianId).single<ClinicianRow>(),
     supabase.rpc("get_my_offers"),
     supabase.from("credentials").select("*").eq("clinician_id", viewer.clinicianId).in("status", ["verified", "expired", "rejected"]),
     supabase.from("matches").select("id", { count: "exact", head: true }).eq("clinician_id", viewer.clinicianId).eq("state", "accepted"),
+    supabase.rpc("clinician_application_gaps", { p_clinician: viewer.clinicianId }),
   ]);
+  const onboarding = !!me && !["active", "paused", "offboarded"].includes(me.status);
   const open = ((offers ?? []) as OfferSummary[]).filter((o) => o.state === "offered");
   const expiring = ((creds ?? []) as CredentialRow[]).filter(
     (c) => c.status === "expired" || c.status === "rejected" || (c.expires_at && daysUntil(c.expires_at, today) <= 60),
@@ -36,20 +39,24 @@ export default async function PortalHome() {
         </Alert>
       )}
 
-      <Card>
-        <CardTitle>Referrals waiting for you ({open.length})</CardTitle>
-        {open.length === 0 ? (
-          <EmptyState>No new referrals right now. We&apos;ll text you when one comes in.</EmptyState>
-        ) : (
-          <ul className="space-y-3">
-            {open.map((o) => (
-              <li key={o.match_id}>
-                <OfferCard offer={o} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      {onboarding && me ? (
+        <ApplicationCard me={me} gaps={(gaps as string[] | null) ?? []} />
+      ) : (
+        <Card>
+          <CardTitle>Referrals waiting for you ({open.length})</CardTitle>
+          {open.length === 0 ? (
+            <EmptyState>No new referrals right now. We&apos;ll text you when one comes in.</EmptyState>
+          ) : (
+            <ul className="space-y-3">
+              {open.map((o) => (
+                <li key={o.match_id}>
+                  <OfferCard offer={o} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>

@@ -68,7 +68,7 @@ export async function drainOutbox(limit = 50): Promise<{ sent: number; skipped: 
 
   const { data: templates } = await db.from("message_templates").select("key, channel, subject, body");
   const byKey = new Map((templates as Template[] | null)?.map((t) => [`${t.key}:${t.channel}`, t]));
-  const links = { appUrl: env.appUrl(), intakeBookingUrl: env.calcomIntakeUrl() };
+  const links = { appUrl: env.appUrl(), intakeBookingUrl: env.calcomIntakeUrl(), clinicianIntakeBookingUrl: env.calcomRecruitmentUrl() };
 
   for (const m of messages) {
     let result: SendResult;

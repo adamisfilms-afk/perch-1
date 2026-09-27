@@ -1,6 +1,7 @@
 // Database behaviour tests: access rules, status machines, the go-live gate,
 // referral offers and credential automation. Needs TEST_DATABASE_URL (see README).
 
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ANON, POSTGRES, SERVICE, TestDb, hasDatabase, user } from "./harness";
 
@@ -231,6 +232,61 @@ d("database", () => {
       await db.q(user(coordinator), "select public.set_clinician_status($1, 'offboarded', null, 'Moving overseas')", [clinicianId]);
       expect(await db.q(user(userId), "select * from public.clinicians where id = $1", [clinicianId])).toHaveLength(0);
       expect(await db.q(POSTGRES, "select * from public.offboarding_checklists where clinician_id = $1", [clinicianId])).toHaveLength(1);
+    });
+  });
+
+  describe("clinician sign-up", () => {
+    it("goes from sign-up to application, intake call and ready", async () => {
+      const { id } = await db.one<{ id: string }>(SERVICE, "select public.submit_application($1) as id", [
+        JSON.stringify({ name: "Olivia Hart", email: "olivia.hart@example.com", mobile: "+61400111333", profession: "occupational_therapist", experience_years: 4, suburb: "Carlton", postcode: "3053" }),
+      ]);
+
+      // The app creates the login; the database links it and queues the welcome email with the sign-in link.
+      const userId = randomUUID();
+      await db.q(POSTGRES, "insert into auth.users (id, email) values ($1, 'olivia.hart@example.com')", [userId]);
+      await db.q(SERVICE, "select public.link_clinician_portal($1, $2, 'hash-1', 'invite')", [id, userId]);
+      const welcome = await db.q<{ payload: { portal_token_hash: string } }>(POSTGRES, "select payload from public.message_log where template = 'clinician_welcome' and recipient_id = $1", [id]);
+      expect(welcome.map((m) => m.payload.portal_token_hash)).toEqual(["hash-1"]);
+      await expect(db.q(user(coordinator), "select public.link_clinician_portal($1, $2, 'x', 'invite')", [id, userId])).rejects.toThrow(/permission denied/);
+
+      // Can't submit until the profile and documents are in.
+      await expect(db.q(user(userId), "select public.submit_my_application('2026-09')")).rejects.toThrow(/isn't complete yet/);
+      await expect(db.q(user(userId), "update public.clinicians set application_submitted_at = now() where id = $1", [id])).rejects.toThrow(/ask the team/);
+      await db.q(POSTGRES, "update public.clinicians set calcom_intro_url = 'https://cal.com/olivia/intro', age_groups = '{3-5}', funding_types = '{private}' where id = $1", [id]);
+      await db.q(POSTGRES, "insert into public.availability (clinician_id, day_of_week, start_time, end_time) values ($1, 2, '15:00', '18:00')", [id]);
+      for (const t of ["ahpra", "wwcc", "ndis_worker_screening", "ndis_orientation", "pi_insurance", "pl_insurance", "abn"]) {
+        await db.q(POSTGRES, "insert into public.credentials (clinician_id, type, status, expires_at) values ($1, $2, 'pending', '2030-01-01')", [id, t]);
+      }
+      await db.q(user(userId), "select public.submit_my_application('2026-09')");
+      const [c] = await db.q<{ application_submitted_at: string | null; signed: boolean }>(
+        POSTGRES,
+        "select application_submitted_at, exists (select 1 from public.agreements a where a.clinician_id = c.id and a.signed_at is not null) as signed from public.clinicians c where id = $1",
+        [id],
+      );
+      expect(c.application_submitted_at).not.toBeNull();
+      expect(c.signed).toBe(true);
+      expect(await db.q(POSTGRES, "select 1 from public.message_log where template = 'application_submitted' and recipient_id = $1", [id])).toHaveLength(1);
+
+      // Booking the intake call through Cal.com.
+      await db.q(SERVICE, "select public.record_booking('screening', $1, null, now() + interval '2 days', 'screen-1')", [id]);
+      expect((await db.one<{ status: string }>(POSTGRES, "select status from public.clinicians where id = $1", [id])).status).toBe("screening");
+
+      // Only a clinical lead or admin records the call, and documents must be verified first.
+      await expect(db.q(user(coordinator), "select public.complete_clinician_intake($1, 'Great call')", [id])).rejects.toThrow(/clinical lead/);
+      await expect(db.q(user(lead), "select public.complete_clinician_intake($1, 'Great call')", [id])).rejects.toThrow(/Not ready to go live: credential:/);
+      await db.q(POSTGRES, "update public.credentials set status = 'verified', verified_at = now() where clinician_id = $1", [id]);
+      await expect(db.q(user(lead), "select public.complete_clinician_intake($1, 'Great call')", [id])).rejects.toThrow(/credential:car_insurance, credential:drivers_licence/);
+      for (const t of ["drivers_licence", "car_insurance"]) {
+        await db.q(user(lead), "select public.record_sighted_credential($1, $2, current_date, '2030-01-01', null, null)", [id, t]);
+      }
+      await db.q(user(lead), "select public.complete_clinician_intake($1, 'Great call')", [id]);
+      const [done] = await db.q<{ status: string; approved: boolean; screening_notes: string }>(
+        POSTGRES,
+        "select status, clinical_lead_approved_at is not null as approved, screening_notes from public.clinicians where id = $1",
+        [id],
+      );
+      expect(done).toEqual({ status: "active", approved: true, screening_notes: "Great call" });
+      expect(await db.q(POSTGRES, "select 1 from public.message_log where template = 'clinician_ready' and recipient_id = $1", [id])).toHaveLength(1);
     });
   });
 

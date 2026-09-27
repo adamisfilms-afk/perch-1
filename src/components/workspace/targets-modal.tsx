@@ -5,11 +5,32 @@ import { useFormStatus } from "react-dom";
 import type { ActionState } from "@/components/forms";
 import { DotsIcon } from "@/components/workspace/icons";
 import { Modal } from "@/components/workspace/modal";
-import { CLIENT_STATUS_LABELS, STEP_TARGET_STATUSES, type KpiTargets, type StepTargets } from "@/lib/client-summary";
-import { saveClientTargets } from "./actions";
 
-/** The ⋯ button next to "New contact", and the targets it opens. */
-export function TargetsButton({ stepTargets, kpiTargets, canEdit }: { stepTargets: StepTargets; kpiTargets: KpiTargets; canEdit: boolean }) {
+export interface TargetField {
+  name: string;
+  label: string;
+  unit: string;
+  value: number | null | undefined;
+  max?: number;
+  step?: string;
+}
+
+/** The ⋯ button in a summary page's header, and the targets it opens (time per step, and the KPI targets). */
+export function TargetsButton({
+  title,
+  stepHelp,
+  steps,
+  kpis,
+  action,
+  canEdit,
+}: {
+  title: string;
+  stepHelp: string;
+  steps: TargetField[];
+  kpis: TargetField[];
+  action: (prev: ActionState, fd: FormData) => Promise<ActionState>;
+  canEdit: boolean;
+}) {
   const [open, setOpen] = useState(false);
   // Remount the form each time the modal opens, so it starts from the saved values.
   const [key, setKey] = useState(0);
@@ -22,33 +43,43 @@ export function TargetsButton({ stepTargets, kpiTargets, canEdit }: { stepTarget
           setOpen(true);
         }}
         className="inline-flex size-10 items-center justify-center rounded-md text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950"
-        aria-label="Client summary settings"
+        aria-label={title}
         aria-haspopup="dialog"
         title="Settings"
       >
         <DotsIcon className="size-5" />
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Client summary settings" subtitle="Targets for each onboarding step and for the numbers at the top of the page.">
-        <TargetsForm key={key} stepTargets={stepTargets} kpiTargets={kpiTargets} canEdit={canEdit} />
+      <Modal open={open} onClose={() => setOpen(false)} title={title} subtitle="Targets for each onboarding step and for the numbers at the top of the page.">
+        <TargetsForm key={key} stepHelp={stepHelp} steps={steps} kpis={kpis} action={action} canEdit={canEdit} />
       </Modal>
     </>
   );
 }
 
-function TargetsForm({ stepTargets, kpiTargets, canEdit }: { stepTargets: StepTargets; kpiTargets: KpiTargets; canEdit: boolean }) {
-  const [state, action] = useActionState<ActionState, FormData>(saveClientTargets, {});
+function TargetsForm({
+  stepHelp,
+  steps,
+  kpis,
+  action,
+  canEdit,
+}: {
+  stepHelp: string;
+  steps: TargetField[];
+  kpis: TargetField[];
+  action: (prev: ActionState, fd: FormData) => Promise<ActionState>;
+  canEdit: boolean;
+}) {
+  const [state, formAction] = useActionState<ActionState, FormData>(action, {});
   return (
-    <form action={action} className="space-y-8" noValidate>
+    <form action={formAction} className="space-y-8" noValidate>
       {!canEdit && <p className="rounded-md bg-neutral-100 px-3 py-2 text-sm text-neutral-700">Only admins can change targets.</p>}
 
       <fieldset disabled={!canEdit} className="space-y-3">
         <legend className="mb-1 text-xs font-medium uppercase tracking-wide text-neutral-400">Time allowed in each step</legend>
-        <p className="text-sm text-neutral-500">
-          Hours a client can wait in a step before moving on. Longer waits show in red in the Elapsed column and raise the dashboard&apos;s stale alerts. Leave blank for no target.
-        </p>
+        <p className="text-sm text-neutral-500">{stepHelp}</p>
         <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-          {STEP_TARGET_STATUSES.map((s) => (
-            <NumberField key={s} name={`step_${s}`} label={CLIENT_STATUS_LABELS[s]} unit="hours" defaultValue={stepTargets[s]} />
+          {steps.map((f) => (
+            <NumberField key={f.name} {...f} />
           ))}
         </div>
       </fieldset>
@@ -56,10 +87,9 @@ function TargetsForm({ stepTargets, kpiTargets, canEdit }: { stepTargets: StepTa
       <fieldset disabled={!canEdit} className="space-y-3">
         <legend className="mb-1 text-xs font-medium uppercase tracking-wide text-neutral-400">Key number targets</legend>
         <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-          <NumberField name="total_clients" label="Total clients" unit="clients" defaultValue={kpiTargets.total_clients} />
-          <NumberField name="active_rate_pct" label="Active clients" unit="% of all clients" defaultValue={kpiTargets.active_rate_pct} max={100} />
-          <NumberField name="signup_to_session_days" label="Sign up to first session" unit="days (average)" defaultValue={kpiTargets.signup_to_session_days} step="0.5" />
-          <NumberField name="new_signups_7d" label="New sign ups" unit="per 7 days" defaultValue={kpiTargets.new_signups_7d} />
+          {kpis.map((f) => (
+            <NumberField key={f.name} {...f} />
+          ))}
         </div>
       </fieldset>
 
@@ -84,17 +114,10 @@ function NumberField({
   name,
   label,
   unit,
-  defaultValue,
+  value,
   max,
   step = "1",
-}: {
-  name: string;
-  label: string;
-  unit: string;
-  defaultValue: number | null | undefined;
-  max?: number;
-  step?: string;
-}) {
+}: TargetField) {
   const id = useId();
   return (
     <div className="text-sm">
@@ -110,7 +133,7 @@ function NumberField({
           min={0}
           max={max}
           step={step}
-          defaultValue={defaultValue ?? ""}
+          defaultValue={value ?? ""}
           aria-describedby={`${id}-unit`}
           className="min-h-10 w-28 rounded-md border border-neutral-300 bg-white px-3 tabular-nums focus:border-neutral-900 focus:outline-none disabled:bg-neutral-50 disabled:text-neutral-500"
         />

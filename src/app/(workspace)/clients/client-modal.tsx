@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { AllocateClinician } from "@/components/workspace/allocate-clinician";
+import { Empty, Facts, Section } from "@/components/workspace/detail-parts";
 import { Modal } from "@/components/workspace/modal";
 import { CLIENT_STATUS_LABELS, FUNDING_SHORT, allocationBlockedReason, childFullName, formatElapsed, type ClientRow } from "@/lib/client-summary";
 import {
@@ -243,30 +244,4 @@ function Detail({ detail, onChanged }: { detail: ClientDetail; onChanged: () => 
       </Section>
     </div>
   );
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section>
-      <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-neutral-400">{title}</h3>
-      {children}
-    </section>
-  );
-}
-
-function Facts({ items }: { items: [string, ReactNode][] }) {
-  return (
-    <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-      {items.map(([k, v]) => (
-        <div key={k}>
-          <dt className="text-neutral-500">{k}</dt>
-          <dd className="text-neutral-900">{v ?? <span className="text-neutral-400">–</span>}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function Empty({ children }: { children: ReactNode }) {
-  return <p className="text-sm text-neutral-500">{children}</p>;
 }

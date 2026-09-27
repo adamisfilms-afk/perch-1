@@ -248,10 +248,10 @@ export const CLINICIAN_STATUS_LABELS: Record<ClinicianStatus, string> = {
 
 /** Mirrors private.clinician_transition_allowed(). Off-boarding is allowed from anywhere. */
 export const CLINICIAN_TRANSITIONS: Record<ClinicianStatus, ClinicianStatus[]> = {
-  applied: ["screening", "documents_requested", "offboarded"],
-  screening: ["documents_requested", "applied", "offboarded"],
-  documents_requested: ["documents_verified", "agreement_signed", "offboarded"],
-  documents_verified: ["agreement_signed", "documents_requested", "onboarding", "offboarded"],
+  applied: ["screening", "documents_requested", "active", "offboarded"],
+  screening: ["documents_requested", "applied", "active", "offboarded"],
+  documents_requested: ["documents_verified", "agreement_signed", "active", "offboarded"],
+  documents_verified: ["agreement_signed", "documents_requested", "onboarding", "active", "offboarded"],
   agreement_signed: ["documents_verified", "onboarding", "orientation", "active", "offboarded"],
   onboarding: ["orientation", "active", "offboarded"],
   orientation: ["active", "onboarding", "offboarded"],
@@ -401,11 +401,35 @@ export const GO_LIVE_GAP_LABELS: Record<string, string> = {
   clinical_lead_approval: "Clinical lead approval",
   calcom_intro_url: "Cal.com intro-call link",
   portal_account: "Portal account invited",
-  service_area: "Service area (base + radius, or suburbs)",
   age_groups: "Age groups",
   funding_types: "Funding types accepted",
   availability: "Available time blocks",
 };
+
+/** What a clinician still needs before they can submit their application (see private.application_gaps()). */
+export function applicationGapLabel(gap: string): string {
+  if (gap.startsWith("document:")) {
+    const type = gap.slice("document:".length) as CredentialType;
+    return `Upload your ${CREDENTIALS[type]?.label ?? type}`;
+  }
+  const labels: Record<string, string> = {
+    mobile: "Add your mobile number",
+    calcom_intro_url: "Add your Cal.com intro-call link",
+    age_groups: "Choose the age groups you see",
+    funding_types: "Choose the funding types you accept",
+    availability: "Add your available times",
+  };
+  return labels[gap] ?? gap;
+}
+
+/** Turns "Not ready to go live: credential:wwcc, agreement" (and the application equivalent) into a readable sentence. */
+export function explainGapsError(message: string): string {
+  const m = message.match(/^(Not ready to go live|Your application isn't complete yet): (.+)$/);
+  if (!m) return message;
+  const gaps = m[2].split(", ");
+  const label = m[1] === "Not ready to go live" ? goLiveGapLabel : applicationGapLabel;
+  return `${m[1]}. Still needed: ${gaps.map(label).join("; ")}.`;
+}
 
 export function goLiveGapLabel(gap: string): string {
   if (gap.startsWith("credential:")) {

@@ -1,18 +1,16 @@
-import { Card, LinkButton } from "@/components/ui";
-import { env } from "@/lib/env";
+import { Card } from "@/components/ui";
 
-export const metadata = { title: "Application received" };
+export const metadata = { title: "Thanks for signing up" };
 
 export default function Thanks() {
   return (
     <Card className="space-y-3">
-      <h1 className="text-2xl font-semibold">Thanks for applying</h1>
+      <h1 className="text-2xl font-semibold">Thanks for signing up</h1>
       <p className="text-stone-700">
-        The next step is a short screening call. If you&apos;d like, book a time now. Otherwise we&apos;ll be in touch within a few business days.
+        We&apos;ve emailed you a link to set your password and open your portal. There you can complete your profile, upload your documents
+        and submit your application.
       </p>
-      <LinkButton href={env.calcomRecruitmentUrl()} variant="primary">
-        Book a screening call
-      </LinkButton>
+      <p className="text-stone-700">Once it&apos;s submitted, we&apos;ll send you a link to book a short intake call with our team.</p>
     </Card>
   );
 }

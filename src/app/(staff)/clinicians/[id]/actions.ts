@@ -6,11 +6,11 @@ import { redirect } from "next/navigation";
 import type { ActionState } from "@/components/forms";
 import { friendlyError, requireStaff } from "@/lib/auth";
 import { lookupAbn } from "@/lib/abn";
-import { CLINICIAN_STATUSES, CREDENTIAL_TYPES, PAUSE_REASONS, type ClinicianStatus, type CredentialType } from "@/lib/domain";
-import { env } from "@/lib/env";
+import { CLINICIAN_STATUSES, CREDENTIAL_TYPES, PAUSE_REASONS, explainGapsError, type ClinicianStatus, type CredentialType } from "@/lib/domain";
 import { sendAgreementForSignature } from "@/lib/integrations/documenso";
 import { drainOutboxQuietly } from "@/lib/notifications/outbox";
 import { parseProfile, saveAvailability } from "@/lib/server/clinician-profile";
+import { sendPortalInvite } from "@/lib/server/portal-invite";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { ClinicianRow } from "@/lib/types";
@@ -179,22 +179,22 @@ export async function recordAgreementSigned(clinicianId: string, _prev: ActionSt
   return done(clinicianId, "Signature recorded");
 }
 
-/** Creates the clinician's portal login and emails them an invite. */
+/** Creates the clinician's portal login (or a fresh sign-in link) and emails it to them. */
 export async function invitePortal(clinicianId: string): Promise<ActionState> {
   await requireStaff();
-  const { supabase, clinician } = await load(clinicianId);
-  if (!clinician) return { error: "Clinician not found" };
-  if (clinician.user_id) return { error: "They already have a portal account" };
-  const admin = createAdminClient();
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(clinician.email, { redirectTo: `${env.appUrl()}/auth/confirm` });
-  if (error || !data.user) return { error: error?.message ?? "Invite failed" };
-  const { error: profileError } = await admin
-    .from("profiles")
-    .insert({ id: data.user.id, role: "clinician", full_name: clinician.name, email: clinician.email });
-  if (profileError) return { error: friendlyError(profileError) };
-  const { error: linkError } = await supabase.from("clinicians").update({ user_id: data.user.id }).eq("id", clinicianId);
-  if (linkError) return { error: friendlyError(linkError) };
-  return done(clinicianId, `Invite sent to ${clinician.email}`);
+  const result = await sendPortalInvite(clinicianId);
+  if (!result.ok) return { error: result.error };
+  return done(clinicianId, "Sign-in link emailed");
+}
+
+/** The intake call is done: approves the clinician and makes them ready for clients. */
+export async function completeIntake(clinicianId: string, _prev: ActionState, fd: FormData): Promise<ActionState> {
+  await requireStaff(["admin", "clinical_lead"]);
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("complete_clinician_intake", { p_clinician: clinicianId, p_notes: text(fd, "notes") });
+  if (error) return { error: explainGapsError(friendlyError(error)) };
+  revalidatePath("/clinicians");
+  return done(clinicianId, "Intake call recorded. They're ready for clients.");
 }
 
 async function removeAccess(clinicianId: string): Promise<void> {

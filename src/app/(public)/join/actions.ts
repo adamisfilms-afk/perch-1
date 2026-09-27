@@ -6,6 +6,7 @@ import type { ActionState } from "@/components/forms";
 import { geocodeSuburb } from "@/lib/geo";
 import { verifyTurnstile } from "@/lib/integrations/turnstile";
 import { drainOutboxQuietly } from "@/lib/notifications/outbox";
+import { sendPortalInvite } from "@/lib/server/portal-invite";
 import { clientIp } from "@/lib/server/request";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { applicationSchema, fieldErrors, formDataToObject } from "@/lib/validation";
@@ -26,7 +27,7 @@ export async function submitApplication(_prev: ActionState, fd: FormData): Promi
 
   const v = parsed.data;
   const geo = await geocodeSuburb(v.suburb, v.postcode);
-  const { error } = await db.rpc("submit_application", { p: { ...v, lat: geo?.lat ?? null, lng: geo?.lng ?? null } });
+  const { data: clinicianId, error } = await db.rpc("submit_application", { p: { ...v, lat: geo?.lat ?? null, lng: geo?.lng ?? null } });
   if (error) {
     if (error.code === "23505") {
       return { error: "We already have an application from this email address. We'll be in touch soon.", values: raw };
@@ -34,6 +35,10 @@ export async function submitApplication(_prev: ActionState, fd: FormData): Promi
     console.error("submit_application failed", error.message);
     return { error: "Sorry, something went wrong. Please try again.", values: raw };
   }
+  // Their portal login and welcome email. If this fails the application is still saved,
+  // and the team can send the invite from the clinician's record.
+  const invite = await sendPortalInvite(clinicianId as string);
+  if (!invite.ok) console.error("Portal invite failed", invite.error);
   after(drainOutboxQuietly);
   redirect("/join/thanks");
 }

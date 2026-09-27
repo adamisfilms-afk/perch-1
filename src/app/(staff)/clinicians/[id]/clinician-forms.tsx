@@ -132,6 +132,17 @@ export function AgreementSignedForm({ action }: { action: FormAction }) {
   );
 }
 
+export function IntakeCallForm({ action }: { action: FormAction }) {
+  return (
+    <ActionForm action={action}>
+      <Field label="Intake call notes" name="notes" hint="Saved as their screening notes">
+        <Textarea name="notes" maxLength={4000} />
+      </Field>
+      <SubmitButton size="sm">Record intake call: ready for clients</SubmitButton>
+    </ActionForm>
+  );
+}
+
 export function NotesForm({ action, notes }: { action: FormAction; notes: string | null }) {
   return (
     <ActionForm action={action}>
