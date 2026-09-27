@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const PUBLIC_PREFIXES = ["/enquire", "/join", "/privacy", "/login", "/auth", "/r", "/api/webhooks", "/api/cron"];
 
 function isPublic(pathname: string): boolean {
-  return pathname === "/" || PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
 export async function proxy(request: NextRequest) {
@@ -35,7 +35,7 @@ export async function proxy(request: NextRequest) {
   if (!data?.claims && !isPublic(pathname)) {
     const login = request.nextUrl.clone();
     login.pathname = "/login";
-    login.search = pathname === "/dashboard" ? "" : `?next=${encodeURIComponent(pathname)}`;
+    login.search = pathname === "/" || pathname === "/dashboard" ? "" : `?next=${encodeURIComponent(pathname)}`;
     return NextResponse.redirect(login);
   }
   return response;
