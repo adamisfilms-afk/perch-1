@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: Helvetica, "Helvetica Neue", Arial, sans-serif;
+  --color-brand-50: #eef6f5;
+  --color-brand-100: #d5ebe8;
+  --color-brand-500: #2a8a80;
+  --color-brand-600: #1f6f67;
+  --color-brand-700: #185a53;
+  --color-brand-900: #0e3531;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: #f7f7f5;
+  color: #1c1c1a;
+}
+
+/* Visible keyboard focus everywhere (WCAG 2.4.7) */
+:focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
