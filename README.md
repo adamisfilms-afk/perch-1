@@ -9,6 +9,7 @@ Built from the product spec v0.1 (23 Sep 2026). This is the **MVP** scope (spec 
 | Area | What it does |
 |---|---|
 | **Public forms** | Enquiry form (`/enquire`) and "Join the network" (`/join`), with server-side validation, Australian mobile checking, Turnstile, rate limiting and versioned consent. Submissions are saved even if email, SMS or the map service is down. |
+| **Client summary** | Redesigned workspace (`/clients`): KPI band (total, active share, sign-up to first session, new sign-ups) against targets, a sortable and searchable client table with time in the current step flagged against its target, a client details modal, and a settings modal (⋯) where admins set the step and KPI targets. |
 | **Family pipeline** | Board by status with stale highlighting (`/families`), family page with the structured intake script, status changes with reasons, timeline, messages and consent record. |
 | **Matching** | Rule-based hard filters and weighted score (spec C1–C2). Shows who passes, why others were ruled out, and a waitlist reason with codes for recruitment. A person saves the shortlist and a person approves it; complex cases need a clinical lead. |
 | **Referral offers** | One clinician at a time (or N in parallel, first to accept wins: a setting). 48h window, 24h SMS nudge, automatic move to the next clinician on decline or timeout. Clinicians see a de-identified summary until they accept. |
@@ -36,6 +37,7 @@ Built from the product spec v0.1 (23 Sep 2026). This is the **MVP** scope (spec 
 ```
 src/app/(public)     enquiry and join forms, privacy notice
 src/app/(auth)       login, MFA set-up/verify, password
+src/app/(workspace)  the redesigned workspace (sidebar layout): clients
 src/app/(staff)      dashboard, families, waitlist, clinicians, verification, metrics, settings
 src/app/(portal)     clinician portal
 src/app/api          Cal.com + Documenso webhooks, cron, signed file access

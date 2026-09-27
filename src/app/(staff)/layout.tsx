@@ -11,6 +11,7 @@ export default async function StaffLayout({ children }: LayoutProps<"/">) {
   ]);
   const links = [
     { href: "/dashboard", label: "Dashboard" },
+    { href: "/clients", label: "Clients" },
     { href: "/families", label: "Families" },
     { href: "/waitlist", label: "Waitlist", count: waitlist ?? 0 },
     { href: "/clinicians", label: "Clinicians" },

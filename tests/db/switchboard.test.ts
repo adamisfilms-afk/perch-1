@@ -52,6 +52,16 @@ d("database", () => {
       expect(aal2.length).toBeGreaterThan(0);
     });
 
+    it("lets staff read the client summary targets but only admins change them", async () => {
+      const read = await db.q<{ value: Record<string, number> }>(user(coordinator), "select value from public.settings where key = 'client_kpi_targets'");
+      expect(read[0].value.active_rate_pct).toBe(50);
+      const blocked = await db.q(user(coordinator), `update public.settings set value = '{"active_rate_pct": 90}' where key = 'client_kpi_targets' returning key`);
+      expect(blocked).toHaveLength(0);
+      const saved = await db.q(user(admin), `update public.settings set value = value || '{"active_rate_pct": 60}' where key = 'client_kpi_targets' returning key`);
+      expect(saved).toHaveLength(1);
+      await db.q(POSTGRES, `update public.settings set value = value || '{"active_rate_pct": 50}' where key = 'client_kpi_targets'`);
+    });
+
     it("keeps the audit log and finance admin-only", async () => {
       expect(await db.q(user(coordinator), "select * from public.audit_log")).toHaveLength(0);
       expect((await db.q(user(admin), "select * from public.audit_log")).length).toBeGreaterThan(0);
