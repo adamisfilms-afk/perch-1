@@ -243,14 +243,16 @@ const DAY = 86_400_000;
  * - Sign up to session: average time from sign-up to first session, for first sessions in the last 90 days.
  * - New sign ups: the last 7 days against the 7 before, with weekly counts for the last 12 weeks.
  */
-export function computeKpis(
-  families: { created_at: string; status: FamilyStatus }[],
+export function computeKpis<T extends { created_at: string }>(
+  families: T[],
   firstSessions: { created_at: string; first_session_at: string }[],
   now: number,
+  /** What counts as active. Clients: a first session has happened. (The clinician summary passes its own.) */
+  isActive: (item: T) => boolean = (item) => (item as { status?: FamilyStatus }).status === "converted",
 ): ClientKpis {
   const created = families.map((f) => Date.parse(f.created_at)).sort((a, b) => a - b);
   const total = families.length;
-  const active = families.filter((f) => f.status === "converted").length;
+  const active = families.filter(isActive).length;
 
   const totalSeries: number[] = [];
   let i = 0;

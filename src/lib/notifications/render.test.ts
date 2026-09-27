@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildVariables, renderTemplate } from "./render";
 
-const links = { appUrl: "https://switchboard.example", intakeBookingUrl: "https://cal.com/team/intake" };
+const links = { appUrl: "https://switchboard.example", intakeBookingUrl: "https://cal.com/team/intake", clinicianIntakeBookingUrl: "https://cal.com/team/screening" };
 
 describe("message rendering", () => {
   it("fills placeholders and leaves unknown ones blank", () => {
@@ -14,6 +14,14 @@ describe("message rendering", () => {
     expect(url.origin + url.pathname).toBe("https://cal.com/team/intake");
     expect(url.searchParams.get("metadata[family_id]")).toBe("f-1");
     expect(url.searchParams.get("name")).toBe("Sam Parent");
+  });
+
+  it("builds the clinician's intake-call booking link and portal sign-in link", () => {
+    const v = buildVariables({ clinician_id: "c-1", clinician_name: "Priya Shah", portal_token_hash: "h/1", portal_link_type: "invite" }, links);
+    const url = new URL(v.screening_booking_url as string);
+    expect(url.origin + url.pathname).toBe("https://cal.com/team/screening");
+    expect(url.searchParams.get("metadata[clinician_id]")).toBe("c-1");
+    expect(v.portal_invite_url).toBe("https://switchboard.example/auth/confirm?token_hash=h%2F1&type=invite");
   });
 
   it("adds friendly labels and one-click links", () => {

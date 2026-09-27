@@ -1,21 +1,20 @@
-import Link from "next/link";
-import { Sparkline, TickGauge } from "@/components/workspace/charts";
+import { HeaderButton, SummaryHeader, SummaryKpiBand } from "@/components/workspace/summary-parts";
+import { TargetsButton } from "@/components/workspace/targets-modal";
 import { requireStaff } from "@/lib/auth";
 import {
+  CLIENT_STATUS_LABELS,
   SETTLED_STATUSES,
+  STEP_TARGET_STATUSES,
   computeKpis,
   parseKpiTargets,
   parseStepTargets,
-  splitDaysHours,
   toClientRow,
-  type ClientKpis,
-  type KpiTargets,
 } from "@/lib/client-summary";
 import type { FamilyStatus, FundingType } from "@/lib/domain";
 import { createClient } from "@/lib/supabase/server";
 import { firstOf } from "@/lib/types";
+import { saveClientTargets } from "./actions";
 import { ClientTable } from "./client-table";
-import { TargetsButton } from "./targets-modal";
 
 export const metadata = { title: "Client summary" };
 
@@ -72,130 +71,43 @@ export default async function ClientsPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="flex flex-wrap-reverse justify-between gap-x-4 border-b border-neutral-200 px-4 md:px-8">
-        {/* Stretches to the header's height with the tabs at the bottom, so the active underline sits on the border. */}
-        <nav aria-label="Clients" className="-mb-px flex items-end gap-6 overflow-x-auto md:gap-10">
-          <Link href="/dashboard" className="whitespace-nowrap border-b-2 border-transparent py-3 text-sm text-neutral-700 hover:text-neutral-900 md:py-3.5">
-            Dashboard
-          </Link>
-          <span aria-current="page" className="flex items-center gap-2 whitespace-nowrap border-b-2 border-neutral-900 py-3 pr-2 text-sm font-medium md:py-3.5">
-            Client Summary
-            <span className="rounded bg-neutral-700 px-1.5 py-0.5 text-[10px] leading-none font-medium text-white" title="Clients still moving through onboarding">
-              {inProgress}
-            </span>
-          </span>
-        </nav>
-        <div className="ml-auto flex items-center gap-2 self-center pt-2 sm:py-2">
-          <Link href="/enquire" className="inline-flex min-h-8 items-center whitespace-nowrap rounded-md bg-neutral-950 px-4 text-sm font-medium text-white hover:bg-neutral-800">
-            New contact
-          </Link>
-          <TargetsButton stepTargets={stepTargets} kpiTargets={kpiTargets} canEdit={viewer.role === "admin"} />
-        </div>
-      </header>
+      <SummaryHeader
+        label="Client Summary"
+        count={inProgress}
+        countTitle="Clients still moving through onboarding"
+        actions={
+          <>
+            <HeaderButton href="/enquire">New contact</HeaderButton>
+            <TargetsButton
+              title="Client summary settings"
+              stepHelp="Hours a client can wait in a step before moving on. Longer waits show in red in the Elapsed column and raise the dashboard's stale alerts. Leave blank for no target."
+              steps={STEP_TARGET_STATUSES.map((s) => ({ name: `step_${s}`, label: CLIENT_STATUS_LABELS[s], unit: "hours", value: stepTargets[s] }))}
+              kpis={[
+                { name: "total_clients", label: "Total clients", unit: "clients", value: kpiTargets.total_clients },
+                { name: "active_rate_pct", label: "Active clients", unit: "% of all clients", value: kpiTargets.active_rate_pct, max: 100 },
+                { name: "signup_to_session_days", label: "Sign up to first session", unit: "days (average)", value: kpiTargets.signup_to_session_days, step: "0.5" },
+                { name: "new_signups_7d", label: "New sign ups", unit: "per 7 days", value: kpiTargets.new_signups_7d },
+              ]}
+              action={saveClientTargets}
+              canEdit={viewer.role === "admin"}
+            />
+          </>
+        }
+      />
 
-      <KpiBand kpis={kpis} targets={kpiTargets} />
+      <SummaryKpiBand
+        noun="clients"
+        kpis={kpis}
+        targets={{
+          total: kpiTargets.total_clients,
+          activeRatePct: kpiTargets.active_rate_pct,
+          signupToSessionDays: kpiTargets.signup_to_session_days,
+          newSignups7d: kpiTargets.new_signups_7d,
+        }}
+        sessionHint={`Average for first sessions in the last 90 days (${kpis.signupToSessionCount})`}
+      />
 
       <ClientTable rows={rows} />
-    </div>
-  );
-}
-
-function KpiBand({ kpis, targets }: { kpis: ClientKpis; targets: KpiTargets }) {
-  const s2s = kpis.signupToSessionHours === null ? null : splitDaysHours(kpis.signupToSessionHours);
-  const s2sDays = kpis.signupToSessionHours === null ? null : kpis.signupToSessionHours / 24;
-  const s2sMax = Math.max((targets.signup_to_session_days ?? 7) * 2, (s2sDays ?? 0) * 1.1);
-  const delta = kpis.newSignups7d - kpis.newSignupsPrev7d;
-  return (
-    <section aria-label="Key numbers" className="grid grid-cols-2 gap-x-6 gap-y-5 bg-neutral-100 px-4 py-4 md:gap-x-10 md:px-8 xl:grid-cols-[repeat(4,minmax(0,15rem))]">
-      <Kpi label="Total clients" target={targets.total_clients !== null ? `${targets.total_clients}` : null}>
-        <p className="text-3xl sm:text-4xl font-medium tracking-tight tabular-nums">{kpis.total}</p>
-        <Sparkline values={kpis.totalSeries} target={targets.total_clients} label={`Total clients over the last 90 days, now ${kpis.total}`} />
-      </Kpi>
-
-      <Kpi label="Active clients" target={targets.active_rate_pct !== null ? `${targets.active_rate_pct}%` : null}>
-        <p className="flex items-start text-3xl sm:text-4xl font-medium tracking-tight tabular-nums">
-          {kpis.activeRatePct === null ? "–" : Math.round(kpis.activeRatePct)}
-          <span className="ml-1">%</span>
-          <span className="ml-3 text-xs font-normal text-neutral-500" title="Active clients">
-            {kpis.active}
-          </span>
-        </p>
-        <TickGauge
-          value={kpis.activeRatePct}
-          max={100}
-          target={targets.active_rate_pct}
-          label={`${Math.round(kpis.activeRatePct ?? 0)}% of clients are active${targets.active_rate_pct ? `, target ${targets.active_rate_pct}%` : ""}`}
-        />
-      </Kpi>
-
-      <Kpi
-        label="Sign up to session"
-        target={targets.signup_to_session_days !== null ? `${targets.signup_to_session_days}d` : null}
-        hint={`Average for first sessions in the last 90 days (${kpis.signupToSessionCount})`}
-      >
-        <p className="text-3xl sm:text-4xl font-medium tracking-tight tabular-nums">
-          {s2s ? (
-            <>
-              {s2s.days}
-              <span className="mr-3 text-base text-neutral-600">d</span>
-              {s2s.hours}
-              <span className="text-base text-neutral-600">h</span>
-            </>
-          ) : (
-            "–"
-          )}
-        </p>
-        <TickGauge
-          value={s2sDays}
-          max={s2sMax}
-          target={targets.signup_to_session_days}
-          label={`Average ${s2sDays?.toFixed(1) ?? "–"} days from sign-up to first session${targets.signup_to_session_days ? `, target ${targets.signup_to_session_days} days` : ""}`}
-        />
-      </Kpi>
-
-      <Kpi
-        label="New sign ups (7d)"
-        target={targets.new_signups_7d !== null ? `${targets.new_signups_7d}` : null}
-        badge={
-          delta !== 0 ? (
-            <span
-              className={delta > 0 ? "rounded bg-emerald-100 px-1 text-[10px] font-medium text-emerald-800" : "rounded bg-red-100 px-1 text-[10px] font-medium text-red-800"}
-              title={`${kpis.newSignupsPrev7d} the week before`}
-            >
-              {delta > 0 ? "↑" : "↓"} {Math.abs(delta)}
-            </span>
-          ) : null
-        }
-      >
-        <p className="text-3xl sm:text-4xl font-medium tracking-tight tabular-nums">{kpis.newSignups7d}</p>
-        <Sparkline values={kpis.newSignupsSeries} target={targets.new_signups_7d} label={`New sign ups per week over the last 12 weeks, ${kpis.newSignups7d} this week`} />
-      </Kpi>
-    </section>
-  );
-}
-
-function Kpi({
-  label,
-  target,
-  hint,
-  badge,
-  children,
-}: {
-  label: string;
-  target: string | null;
-  hint?: string;
-  badge?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-2" title={hint}>
-      <h2 className="flex items-center gap-2 whitespace-nowrap text-sm text-neutral-800">
-        {label}
-        {badge}
-      </h2>
-      {children}
-      {/* Pinned to the bottom of the cell so every target lines up, whatever the chart's height. */}
-      {target && <p className="mt-auto text-xs text-neutral-500">Target {target}</p>}
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import type { ActionState } from "@/components/forms";
 import { friendlyError, requireClinician } from "@/lib/auth";
-import { CREDENTIAL_TYPES, CREDENTIALS, type CredentialType } from "@/lib/domain";
+import { CREDENTIAL_TYPES, CREDENTIALS, explainGapsError, type CredentialType } from "@/lib/domain";
 import { drainOutboxQuietly } from "@/lib/notifications/outbox";
 import { parseProfile, saveAvailability } from "@/lib/server/clinician-profile";
 import { createClient } from "@/lib/supabase/server";
@@ -106,4 +106,14 @@ export async function recordUpload(_prev: ActionState, fd: FormData): Promise<Ac
     file_path: path,
   });
   return error ? { error: friendlyError(error) } : done(["/portal/documents"], "Uploaded. We'll check it and let you know.");
+}
+
+/** Submit the application (accepting the service agreement). The database checks it's complete and emails the intake-call link. */
+export async function submitApplication(agreementVersion: string, _prev: ActionState, fd: FormData): Promise<ActionState> {
+  await requireClinician();
+  if (fd.get("agree") !== "on") return { error: "Please tick to accept the service agreement" };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("submit_my_application", { p_agreement_version: agreementVersion });
+  if (error) return { error: explainGapsError(friendlyError(error)) };
+  return done(["/portal"], "Application submitted. We've emailed you a link to book your intake call.");
 }

@@ -26,7 +26,7 @@ import { createClient } from "@/lib/supabase/server";
 import { todayInAustralia } from "@/lib/time";
 import type { AvailabilityRow, ClinicianRow, CredentialRow, StatusHistoryRow } from "@/lib/types";
 import * as actions from "./actions";
-import { AbnForm, AgreementSignedForm, NotesForm, OffboardingForm, SightedForm, StatusForm, VerifyForm } from "./clinician-forms";
+import { AbnForm, AgreementSignedForm, IntakeCallForm, NotesForm, OffboardingForm, SightedForm, StatusForm, VerifyForm } from "./clinician-forms";
 
 export const metadata = { title: "Clinician" };
 
@@ -86,9 +86,25 @@ export default async function ClinicianPage({ params, searchParams }: PageProps<
         <div className="space-y-6">
           {clinician.status !== "active" && clinician.status !== "offboarded" && (
             <Card>
-              <CardTitle>Go-live checklist</CardTitle>
+              <CardTitle>Onboarding</CardTitle>
+              <p className="mb-3 text-sm">
+                Application:{" "}
+                {clinician.application_submitted_at ? (
+                  <>
+                    submitted <When at={clinician.application_submitted_at} />
+                  </>
+                ) : (
+                  "not submitted yet (they finish it in the portal)"
+                )}
+                {typeof clinician.application.screening_at === "string" && (
+                  <>
+                    {" · "}intake call booked for <When at={clinician.application.screening_at} />
+                  </>
+                )}
+              </p>
+              <p className="mb-1 text-sm font-medium">Before they can go live</p>
               {goLiveGaps.length === 0 ? (
-                <Alert tone="green">Everything&apos;s in place. They can be set to Active.</Alert>
+                <Alert tone="green">Everything&apos;s in place.</Alert>
               ) : (
                 <ul className="space-y-1 text-sm">
                   {goLiveGaps.map((g) => (
@@ -102,8 +118,21 @@ export default async function ClinicianPage({ params, searchParams }: PageProps<
                 {!clinician.clinical_lead_approved_at && ["admin", "clinical_lead"].includes(viewer.role) && (
                   <SimpleActionButton action={actions.approveGoLive.bind(null, id)} label="Approve as clinical lead" variant="secondary" />
                 )}
-                {!clinician.user_id && <SimpleActionButton action={actions.invitePortal.bind(null, id)} label="Invite to the portal" variant="secondary" />}
+                <SimpleActionButton
+                  action={actions.invitePortal.bind(null, id)}
+                  label={clinician.user_id ? "Resend portal sign-in link" : "Invite to the portal"}
+                  variant="secondary"
+                />
               </div>
+              {clinician.application_submitted_at && clinician.status !== "paused" && (
+                <div className="mt-4 border-t border-stone-100 pt-4">
+                  {["admin", "clinical_lead"].includes(viewer.role) ? (
+                    <IntakeCallForm action={actions.completeIntake.bind(null, id)} />
+                  ) : (
+                    <p className="text-sm text-stone-600">A clinical lead or admin records the intake call, which makes them ready for clients.</p>
+                  )}
+                </div>
+              )}
               {clinician.clinical_lead_approved_at && (
                 <p className="mt-2 text-xs text-stone-500">
                   Approved by {names.get(clinician.clinical_lead_approved_by ?? "") ?? "clinical lead"} on <When at={clinician.clinical_lead_approved_at} />
