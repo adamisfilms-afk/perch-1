@@ -167,6 +167,7 @@ export class TestDb {
       lat: -33.8148,
       lng: 151.0017,
       child_first_name: "Alex",
+      child_last_name: "Parent",
       age_years: 5,
       concerns: ["speech_sounds"],
       service_type: "speech",

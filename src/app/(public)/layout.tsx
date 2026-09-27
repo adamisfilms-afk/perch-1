@@ -5,9 +5,7 @@ export default function PublicLayout({ children }: LayoutProps<"/">) {
     <div className="flex min-h-full flex-1 flex-col">
       <header className="border-b border-stone-200 bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
-          <Link href="/" className="font-semibold text-brand-700">
-            The Switchboard
-          </Link>
+          <span className="font-semibold text-brand-700">The Switchboard</span>
           <Link href="/login" className="text-sm text-stone-600 hover:text-stone-900">
             Staff and clinician login
           </Link>

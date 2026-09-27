@@ -28,7 +28,7 @@ type FamilyListRow = {
   state: string | null;
   suburb: string;
   funding_type: FundingType;
-  children: { first_name: string }[] | null;
+  children: { first_name: string; last_name: string | null }[] | null;
 };
 
 type ConversionRow = {
@@ -41,7 +41,7 @@ async function loadClientSummary() {
   const [{ data: families }, { data: conversions }, { data: settings }] = await Promise.all([
     supabase
       .from("families")
-      .select("id, parent_name, status, status_changed_at, created_at, state, suburb, funding_type, children(first_name)")
+      .select("id, parent_name, status, status_changed_at, created_at, state, suburb, funding_type, children(first_name, last_name)")
       .is("anonymised_at", null)
       .order("created_at", { ascending: false })
       .limit(5000),
@@ -74,18 +74,18 @@ export default async function ClientsPage() {
     <div className="flex min-h-full flex-col">
       <header className="flex flex-wrap-reverse items-end justify-between gap-x-4 border-b border-neutral-200 px-4 md:px-8">
         <nav aria-label="Clients" className="-mb-px flex gap-6 overflow-x-auto md:gap-10">
-          <Link href="/dashboard" className="whitespace-nowrap border-b-2 border-transparent py-4 text-[17px] text-neutral-700 hover:text-neutral-900 md:py-5">
+          <Link href="/dashboard" className="whitespace-nowrap border-b-2 border-transparent py-3 text-sm text-neutral-700 hover:text-neutral-900 md:py-3.5">
             Dashboard
           </Link>
-          <span aria-current="page" className="flex items-center gap-3 whitespace-nowrap border-b-2 border-neutral-900 py-4 pr-2 text-[17px] font-medium md:py-5">
+          <span aria-current="page" className="flex items-center gap-2 whitespace-nowrap border-b-2 border-neutral-900 py-3 pr-2 text-sm font-medium md:py-3.5">
             Client Summary
-            <span className="rounded-md bg-neutral-700 px-2 py-0.5 text-xs font-medium text-white" title="Clients still moving through onboarding">
+            <span className="rounded bg-neutral-700 px-1.5 py-0.5 text-[10px] leading-none font-medium text-white" title="Clients still moving through onboarding">
               {inProgress}
             </span>
           </span>
         </nav>
-        <div className="ml-auto flex items-center gap-2 pt-3 sm:py-2.5">
-          <Link href="/enquire" className="inline-flex min-h-10 items-center whitespace-nowrap rounded-md bg-neutral-950 px-5 text-[15px] font-medium text-white hover:bg-neutral-800">
+        <div className="ml-auto flex items-center gap-2 pt-2 sm:py-2">
+          <Link href="/enquire" className="inline-flex min-h-8 items-center whitespace-nowrap rounded-md bg-neutral-950 px-4 text-sm font-medium text-white hover:bg-neutral-800">
             New contact
           </Link>
           <TargetsButton stepTargets={stepTargets} kpiTargets={kpiTargets} canEdit={viewer.role === "admin"} />
@@ -105,14 +105,14 @@ function KpiBand({ kpis, targets }: { kpis: ClientKpis; targets: KpiTargets }) {
   const s2sMax = Math.max((targets.signup_to_session_days ?? 7) * 2, (s2sDays ?? 0) * 1.1);
   const delta = kpis.newSignups7d - kpis.newSignupsPrev7d;
   return (
-    <section aria-label="Key numbers" className="grid grid-cols-2 gap-x-6 gap-y-8 md:gap-x-12 bg-neutral-100 px-4 py-6 sm:grid-cols-2 md:px-8 xl:grid-cols-[repeat(4,minmax(0,17rem))]">
+    <section aria-label="Key numbers" className="grid grid-cols-2 gap-x-6 gap-y-5 bg-neutral-100 px-4 py-4 md:gap-x-10 md:px-8 xl:grid-cols-[repeat(4,minmax(0,15rem))]">
       <Kpi label="Total clients" target={targets.total_clients !== null ? `${targets.total_clients}` : null}>
-        <p className="text-4xl sm:text-5xl font-medium tracking-tight tabular-nums">{kpis.total}</p>
+        <p className="text-3xl sm:text-4xl font-medium tracking-tight tabular-nums">{kpis.total}</p>
         <Sparkline values={kpis.totalSeries} target={targets.total_clients} label={`Total clients over the last 90 days, now ${kpis.total}`} />
       </Kpi>
 
       <Kpi label="Active clients" target={targets.active_rate_pct !== null ? `${targets.active_rate_pct}%` : null}>
-        <p className="flex items-start text-4xl sm:text-5xl font-medium tracking-tight tabular-nums">
+        <p className="flex items-start text-3xl sm:text-4xl font-medium tracking-tight tabular-nums">
           {kpis.activeRatePct === null ? "–" : Math.round(kpis.activeRatePct)}
           <span className="ml-1">%</span>
           <span className="ml-3 text-xs font-normal text-neutral-500" title="Active clients">
@@ -132,13 +132,13 @@ function KpiBand({ kpis, targets }: { kpis: ClientKpis; targets: KpiTargets }) {
         target={targets.signup_to_session_days !== null ? `${targets.signup_to_session_days}d` : null}
         hint={`Average for first sessions in the last 90 days (${kpis.signupToSessionCount})`}
       >
-        <p className="text-4xl sm:text-5xl font-medium tracking-tight tabular-nums">
+        <p className="text-3xl sm:text-4xl font-medium tracking-tight tabular-nums">
           {s2s ? (
             <>
               {s2s.days}
-              <span className="mr-4 text-lg text-neutral-600">d</span>
+              <span className="mr-3 text-base text-neutral-600">d</span>
               {s2s.hours}
-              <span className="text-lg text-neutral-600">h</span>
+              <span className="text-base text-neutral-600">h</span>
             </>
           ) : (
             "–"
@@ -166,7 +166,7 @@ function KpiBand({ kpis, targets }: { kpis: ClientKpis; targets: KpiTargets }) {
           ) : null
         }
       >
-        <p className="text-4xl sm:text-5xl font-medium tracking-tight tabular-nums">{kpis.newSignups7d}</p>
+        <p className="text-3xl sm:text-4xl font-medium tracking-tight tabular-nums">{kpis.newSignups7d}</p>
         <Sparkline values={kpis.newSignupsSeries} target={targets.new_signups_7d} label={`New sign ups per week over the last 12 weeks, ${kpis.newSignups7d} this week`} />
       </Kpi>
     </section>
@@ -187,8 +187,8 @@ function Kpi({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3" title={hint}>
-      <h2 className="flex items-center gap-2 text-[17px] text-neutral-800">
+    <div className="flex flex-col gap-2" title={hint}>
+      <h2 className="flex items-center gap-2 whitespace-nowrap text-sm text-neutral-800">
         {label}
         {badge}
       </h2>

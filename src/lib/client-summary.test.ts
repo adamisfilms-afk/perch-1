@@ -38,6 +38,11 @@ describe("client rows", () => {
     expect(filterClients([r], "olivia")).toHaveLength(1);
   });
 
+  it("uses the child's full name when a last name is recorded", () => {
+    expect(toClientRow(family({ children: [{ first_name: "Noah", last_name: "Martin" }] }), {}, NOW).name).toBe("Noah Martin");
+    expect(toClientRow(family({ children: [{ first_name: "Noah", last_name: "Martin" }, { first_name: "Ruby", last_name: null }] }), {}, NOW).name).toBe("Noah Martin & Ruby");
+  });
+
   it("counts time since the previous step and flags it against the step's target", () => {
     const r = toClientRow(family({ status_changed_at: hoursAgo(44.1) }), { new: 24 }, NOW);
     expect(formatElapsed(r.elapsedHours)).toBe("44h 6m");

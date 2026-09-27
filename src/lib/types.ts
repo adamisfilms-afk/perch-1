@@ -57,6 +57,7 @@ export interface ChildRow {
   id: string;
   family_id: string;
   first_name: string;
+  last_name: string | null;
   dob: string | null;
   age_years: number | null;
   concerns: string[];

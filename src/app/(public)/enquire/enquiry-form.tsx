@@ -50,9 +50,14 @@ export function EnquiryForm() {
 
           <Card className="space-y-4">
             <h2 className="font-semibold">About your child</h2>
-            <Field label="Child's first name" name="child_first_name" required error={e.child_first_name}>
-              <Input name="child_first_name" defaultValue={str(v.child_first_name)} error={e.child_first_name} />
-            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Child's first name" name="child_first_name" required error={e.child_first_name}>
+                <Input name="child_first_name" defaultValue={str(v.child_first_name)} error={e.child_first_name} />
+              </Field>
+              <Field label="Child's last name" name="child_last_name" required error={e.child_last_name}>
+                <Input name="child_last_name" defaultValue={str(v.child_last_name)} error={e.child_last_name} />
+              </Field>
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Age (years)" name="age_years" hint="Or enter their date of birth" error={e.age_years}>
                 <Input name="age_years" type="number" min={0} max={25} inputMode="numeric" defaultValue={str(v.age_years)} error={e.age_years} />

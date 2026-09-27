@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { DateOnly, FamilyStatusBadge, MatchStateBadge, When } from "@/components/display";
 import { Alert, Badge, Card, CardTitle, DefinitionList, EmptyState, PageHeader } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
+import { childFullName } from "@/lib/client-summary";
 import {
   CONCERN_LABELS,
   FAMILY_STATUS_LABELS,
@@ -110,7 +111,7 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
       <PageHeader
         title={
           <span className="flex flex-wrap items-center gap-2">
-            {children.map((c) => c.first_name).join(" & ")} <span className="font-normal text-stone-500">· {family.parent_name}</span>
+            {children.map(childFullName).join(" & ")} <span className="font-normal text-stone-500">· {family.parent_name}</span>
           </span>
         }
         description={
@@ -262,7 +263,7 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
           {children.map((c) => (
             <Card key={c.id}>
               <CardTitle>
-                {c.first_name}, {ageFrom(c.dob, c.age_years, today)}
+                {childFullName(c)}, {ageFrom(c.dob, c.age_years, today)}
               </CardTitle>
               <DefinitionList
                 items={[

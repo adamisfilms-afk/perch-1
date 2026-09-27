@@ -19,10 +19,13 @@ body {
   color: #1c1c1a;
 }
 
-/* Visible keyboard focus everywhere (WCAG 2.4.7) */
-:focus-visible {
-  outline: 2px solid var(--color-brand-600);
-  outline-offset: 2px;
+/* Visible keyboard focus everywhere (WCAG 2.4.7). In the base layer so a utility such as
+   focus:outline-none can turn it off where the control shows focus another way. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

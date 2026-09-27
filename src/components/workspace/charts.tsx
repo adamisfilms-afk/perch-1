@@ -16,7 +16,7 @@ export function Sparkline({ values, target, label }: { values: number[]; target?
   const points = values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   const last = values.length - 1;
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="h-12 w-full max-w-56 overflow-visible" role="img" aria-label={label}>
+    <svg viewBox={`0 0 ${w} ${h}`} className="h-10 w-full max-w-48 overflow-visible" role="img" aria-label={label}>
       {showTarget && (
         <line x1={pad} x2={w - pad} y1={y(target!)} y2={y(target!)} stroke="currentColor" strokeDasharray="2 4" className="text-neutral-300" />
       )}
@@ -37,7 +37,7 @@ export function TickGauge({ value, max, target, label }: { value: number | null;
   const pos = (v: number) => Math.min(w, Math.max(0, (v / max) * w));
   const filled = value == null ? -1 : Math.round((Math.min(value, max) / max) * (ticks - 1));
   return (
-    <svg viewBox={`-4 0 ${w + 8} 30`} className="h-8 w-full max-w-64 overflow-visible" role="img" aria-label={label}>
+    <svg viewBox={`-4 0 ${w + 8} 30`} className="h-7 w-full max-w-52 overflow-visible" role="img" aria-label={label}>
       {value != null && <path d={`M${pos(value) - 4},4 h8 l-4,6 z`} className="fill-neutral-900" />}
       {Array.from({ length: ticks }, (_, i) => (
         <line key={i} x1={i * step} x2={i * step} y1={12} y2={20} strokeWidth={1.2} stroke="currentColor" className={i <= filled ? "text-neutral-700" : "text-neutral-300"} />

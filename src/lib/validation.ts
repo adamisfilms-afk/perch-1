@@ -32,6 +32,7 @@ export const enquirySchema = z
     suburb: trimmed(100),
     postcode,
     child_first_name: trimmed(100),
+    child_last_name: trimmed(100),
     dob: z.preprocess(emptyToUndefined, z.iso.date().optional()),
     age_years: z.preprocess(emptyToUndefined, z.coerce.number().int().min(0).max(25).optional()),
     concerns: z.array(z.enum(ENQUIRY_CONCERNS as [string, ...string[]])).min(1, "Tick at least one"),

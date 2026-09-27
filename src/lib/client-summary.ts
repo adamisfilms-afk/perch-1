@@ -84,9 +84,14 @@ export function parseStepTargets(value: unknown): StepTargets {
   return out;
 }
 
+/** "Noah Smith", or just "Noah" for children recorded before last names were collected. */
+export function childFullName(c: { first_name: string; last_name?: string | null }): string {
+  return c.last_name ? `${c.first_name} ${c.last_name}` : c.first_name;
+}
+
 export interface ClientRow {
   id: string;
-  /** The child (or children) being seen: the client. Falls back to the parent if no child is recorded. */
+  /** The child (or children) being seen, by full name: the client. Falls back to the parent if no child is recorded. */
   name: string;
   parentName: string;
   status: FamilyStatus;
@@ -113,7 +118,7 @@ export function toClientRow(
     state: string | null;
     suburb: string;
     funding_type: FundingType;
-    children?: { first_name: string }[] | null;
+    children?: { first_name: string; last_name?: string | null }[] | null;
   },
   targets: StepTargets,
   now: number,
@@ -123,7 +128,7 @@ export function toClientRow(
   const targetHours = settled ? null : (targets[f.status] ?? null);
   return {
     id: f.id,
-    name: f.children?.length ? f.children.map((c) => c.first_name).join(" & ") : f.parent_name,
+    name: f.children?.length ? f.children.map(childFullName).join(" & ") : f.parent_name,
     parentName: f.parent_name,
     status: f.status,
     statusChangedAt: f.status_changed_at,
