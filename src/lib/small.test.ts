@@ -88,6 +88,7 @@ describe("enquiry validation", () => {
     suburb: "Parramatta",
     postcode: "2150",
     child_first_name: "Alex",
+    child_last_name: "Parent",
     age_years: "5",
     concerns: ["language"],
     service_type: "speech",

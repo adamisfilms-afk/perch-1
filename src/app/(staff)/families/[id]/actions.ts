@@ -74,6 +74,7 @@ function childFields(fd: FormData): Partial<ChildRow> {
   const age = text(fd, "age_years");
   return {
     first_name: text(fd, "first_name") ?? undefined,
+    last_name: text(fd, "last_name"),
     dob: text(fd, "dob"),
     age_years: age === null ? null : Number(age),
     concerns: list(fd, "concerns", CONCERNS),
@@ -119,6 +120,7 @@ export async function completeIntake(familyId: string, childId: string, _prev: A
   // Match-relevant answers go straight onto the child and family records.
   const child = childFields(fd);
   delete child.first_name;
+  delete child.last_name;
   const funding = String(fd.get("funding_type"));
   if (outcome === "ready_to_match" && (funding === "unsure" || child.service_type === "unsure")) {
     return { error: "Confirm the service type and funding before marking Ready to match" };

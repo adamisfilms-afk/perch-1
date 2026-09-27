@@ -108,6 +108,17 @@ d("database", () => {
       ]);
     });
 
+    it("keeps the child's last name from the enquiry, and clears it when the family is anonymised", async () => {
+      const familyId = await db.submitEnquiry({ child_first_name: "Noah", child_last_name: " Martin " });
+      const [child] = await db.q(POSTGRES, "select first_name, last_name from public.children where family_id = $1", [familyId]);
+      expect(child).toEqual({ first_name: "Noah", last_name: "Martin" });
+      await db.q(POSTGRES, "update public.families set status = 'lost' where id = $1", [familyId]);
+      await db.q(POSTGRES, "update public.families set status_changed_at = now() - interval '2 years' where id = $1", [familyId]);
+      await db.q(POSTGRES, "select private.anonymise_stale_families()");
+      const [after] = await db.q(POSTGRES, "select first_name, last_name from public.children where family_id = $1", [familyId]);
+      expect(after).toEqual({ first_name: "Anonymised", last_name: null });
+    });
+
     it("refuses an enquiry without consent", async () => {
       await expect(db.submitEnquiry({ consent_share: false })).rejects.toThrow(/Consent is required/);
     });

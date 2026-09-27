@@ -59,11 +59,16 @@ export function FamilyDetailsForm({ action, family }: { action: FormAction; fami
 function ChildFields({ child, includeName = true }: { child: ChildRow; includeName?: boolean }) {
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className={includeName ? "grid gap-3 sm:grid-cols-2" : "grid gap-3 sm:grid-cols-3"}>
         {includeName && (
-          <Field label="First name" name="first_name">
-            <Input name="first_name" defaultValue={child.first_name} />
-          </Field>
+          <>
+            <Field label="First name" name="first_name">
+              <Input name="first_name" defaultValue={child.first_name} />
+            </Field>
+            <Field label="Last name" name="last_name">
+              <Input name="last_name" defaultValue={child.last_name ?? ""} />
+            </Field>
+          </>
         )}
         <Field label="Age" name="age_years">
           <Input name="age_years" type="number" min={0} max={25} defaultValue={child.age_years ?? ""} />

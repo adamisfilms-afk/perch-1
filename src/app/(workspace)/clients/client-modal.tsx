@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { Modal } from "@/components/workspace/modal";
-import { CLIENT_STATUS_LABELS, FUNDING_SHORT, formatElapsed, type ClientRow } from "@/lib/client-summary";
+import { CLIENT_STATUS_LABELS, FUNDING_SHORT, childFullName, formatElapsed, type ClientRow } from "@/lib/client-summary";
 import {
   CONCERN_LABELS,
   FUNDING_LABELS,
@@ -126,7 +126,7 @@ function Detail({ detail }: { detail: ClientDetail }) {
       </Section>
 
       {children.map((c) => (
-        <Section key={c.id} title={`Child: ${c.first_name}`}>
+        <Section key={c.id} title={`Child: ${childFullName(c)}`}>
           <Facts
             items={[
               ["Age", ageFrom(c.dob, c.age_years)?.toString() ?? null],
