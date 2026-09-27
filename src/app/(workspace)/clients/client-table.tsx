@@ -105,11 +105,12 @@ export function ClientTable({ rows }: { rows: ClientRow[] }) {
                   <button
                     type="button"
                     onClick={() => setOpenId(r.id)}
+                    title={`Parent or carer: ${r.parentName}`}
                     className="text-left text-neutral-700 decoration-neutral-400 underline-offset-4 hover:text-neutral-900 hover:underline focus-visible:underline"
                   >
                     {r.name}
                   </button>
-                  {r.children && <span className="sr-only">, child {r.children}</span>}
+                  <span className="sr-only">, parent {r.parentName}</span>
                 </td>
                 <td className="py-3.5 pr-4">
                   <StatusPill status={r.status} />

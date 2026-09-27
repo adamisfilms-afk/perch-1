@@ -86,8 +86,9 @@ export function parseStepTargets(value: unknown): StepTargets {
 
 export interface ClientRow {
   id: string;
+  /** The child (or children) being seen: the client. Falls back to the parent if no child is recorded. */
   name: string;
-  children: string | null;
+  parentName: string;
   status: FamilyStatus;
   statusChangedAt: string;
   createdAt: string;
@@ -122,8 +123,8 @@ export function toClientRow(
   const targetHours = settled ? null : (targets[f.status] ?? null);
   return {
     id: f.id,
-    name: f.parent_name,
-    children: f.children?.length ? f.children.map((c) => c.first_name).join(", ") : null,
+    name: f.children?.length ? f.children.map((c) => c.first_name).join(" & ") : f.parent_name,
+    parentName: f.parent_name,
     status: f.status,
     statusChangedAt: f.status_changed_at,
     createdAt: f.created_at,
@@ -204,7 +205,7 @@ export function filterClients(rows: ClientRow[], q: string): ClientRow[] {
   const needle = q.trim().toLowerCase();
   if (!needle) return rows;
   return rows.filter((r) =>
-    [r.name, r.children, r.suburb, r.state, CLIENT_STATUS_LABELS[r.status], FUNDING_SHORT[r.funding]].some((v) => v?.toLowerCase().includes(needle)),
+    [r.name, r.parentName, r.suburb, r.state, CLIENT_STATUS_LABELS[r.status], FUNDING_SHORT[r.funding]].some((v) => v?.toLowerCase().includes(needle)),
   );
 }
 

@@ -30,6 +30,14 @@ function family(over: Partial<Parameters<typeof toClientRow>[0]> = {}) {
 }
 
 describe("client rows", () => {
+  it("names the client by the child, keeping the parent for search", () => {
+    const r = toClientRow(family({ children: [{ first_name: "Noah" }, { first_name: "Ruby" }] }), {}, NOW);
+    expect(r.name).toBe("Noah & Ruby");
+    expect(r.parentName).toBe("Olivia Martin");
+    expect(toClientRow(family({ children: [] }), {}, NOW).name).toBe("Olivia Martin");
+    expect(filterClients([r], "olivia")).toHaveLength(1);
+  });
+
   it("counts time since the previous step and flags it against the step's target", () => {
     const r = toClientRow(family({ status_changed_at: hoursAgo(44.1) }), { new: 24 }, NOW);
     expect(formatElapsed(r.elapsedHours)).toBe("44h 6m");

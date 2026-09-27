@@ -53,6 +53,7 @@ export function ClientModal({ row, onClose }: { row: ClientRow | null; onClose: 
       subtitle={
         row && (
           <span className="flex flex-wrap items-center gap-2">
+            <span>Parent: {row.parentName} ·</span>
             <StatusPill status={row.status} />
             {row.elapsedHours !== null && (
               <span className={row.overdue ? "text-red-800" : undefined}>
