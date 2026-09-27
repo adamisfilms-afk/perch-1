@@ -72,8 +72,9 @@ export default async function ClientsPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="flex flex-wrap-reverse items-end justify-between gap-x-4 border-b border-neutral-200 px-4 md:px-8">
-        <nav aria-label="Clients" className="-mb-px flex gap-6 overflow-x-auto md:gap-10">
+      <header className="flex flex-wrap-reverse justify-between gap-x-4 border-b border-neutral-200 px-4 md:px-8">
+        {/* Stretches to the header's height with the tabs at the bottom, so the active underline sits on the border. */}
+        <nav aria-label="Clients" className="-mb-px flex items-end gap-6 overflow-x-auto md:gap-10">
           <Link href="/dashboard" className="whitespace-nowrap border-b-2 border-transparent py-3 text-sm text-neutral-700 hover:text-neutral-900 md:py-3.5">
             Dashboard
           </Link>
@@ -84,7 +85,7 @@ export default async function ClientsPage() {
             </span>
           </span>
         </nav>
-        <div className="ml-auto flex items-center gap-2 pt-2 sm:py-2">
+        <div className="ml-auto flex items-center gap-2 self-center pt-2 sm:py-2">
           <Link href="/enquire" className="inline-flex min-h-8 items-center whitespace-nowrap rounded-md bg-neutral-950 px-4 text-sm font-medium text-white hover:bg-neutral-800">
             New contact
           </Link>
@@ -193,7 +194,8 @@ function Kpi({
         {badge}
       </h2>
       {children}
-      {target && <p className="-mt-1 text-xs text-neutral-500">Target {target}</p>}
+      {/* Pinned to the bottom of the cell so every target lines up, whatever the chart's height. */}
+      {target && <p className="mt-auto text-xs text-neutral-500">Target {target}</p>}
     </div>
   );
 }
