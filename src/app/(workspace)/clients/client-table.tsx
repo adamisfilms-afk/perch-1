@@ -53,7 +53,7 @@ export function ClientTable({ rows }: { rows: ClientRow[] }) {
   return (
     <section aria-label="Clients" className="flex-1">
       <div className="flex items-center gap-3 border-b border-neutral-200 px-4 md:px-8">
-        <SearchIcon className="size-5 shrink-0 text-neutral-500" />
+        <SearchIcon className="size-4 shrink-0 text-neutral-500" />
         <label htmlFor="client-search" className="sr-only">
           Search clients
         </label>
@@ -63,12 +63,12 @@ export function ClientTable({ rows }: { rows: ClientRow[] }) {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search"
-          className="min-h-13 w-full bg-transparent py-3 text-[17px] placeholder:text-neutral-500 focus:outline-none"
+          className="min-h-10 w-full bg-transparent py-2 text-sm placeholder:text-neutral-500 focus:outline-none"
         />
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[960px] border-collapse text-left text-[16px]">
+        <table className="w-full min-w-[900px] border-collapse whitespace-nowrap text-left text-[13px]">
           <caption className="sr-only">Clients, sorted by {COLUMNS.find((c) => c.key === sort.key)?.label.toLowerCase()}. Select a name to see their details.</caption>
           <thead>
             <tr className="border-b border-neutral-200">
@@ -79,7 +79,7 @@ export function ClientTable({ rows }: { rows: ClientRow[] }) {
                     key={c.label}
                     scope="col"
                     aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
-                    className={cn("py-4 pr-4 text-[15px] font-normal uppercase tracking-wide", c.className)}
+                    className={cn("py-2.5 pr-4 text-xs font-normal uppercase tracking-wide", c.className)}
                   >
                     {c.key ? (
                       <button
@@ -88,7 +88,7 @@ export function ClientTable({ rows }: { rows: ClientRow[] }) {
                         className={cn("inline-flex items-center gap-1.5 uppercase tracking-wide", active ? "text-neutral-900" : "text-neutral-400 hover:text-neutral-700")}
                       >
                         {c.label}
-                        <ChevronIcon className={cn("size-4 transition-transform", active ? "opacity-100" : "opacity-0", active && sort.dir === "desc" && "rotate-180")} />
+                        <ChevronIcon className={cn("size-3.5 transition-transform", active ? "opacity-100" : "opacity-0", active && sort.dir === "desc" && "rotate-180")} />
                       </button>
                     ) : (
                       <span className="text-neutral-400">{c.label}</span>
@@ -101,7 +101,7 @@ export function ClientTable({ rows }: { rows: ClientRow[] }) {
           <tbody>
             {visible.map((r) => (
               <tr key={r.id} className="group text-neutral-600 hover:bg-neutral-50">
-                <td className="py-3.5 pl-4 pr-4 md:pl-16">
+                <td className="py-2 pl-4 pr-4 md:pl-16">
                   <button
                     type="button"
                     onClick={() => setOpenId(r.id)}
@@ -112,10 +112,10 @@ export function ClientTable({ rows }: { rows: ClientRow[] }) {
                   </button>
                   <span className="sr-only">, parent {r.parentName}</span>
                 </td>
-                <td className="py-3.5 pr-4">
+                <td className="py-2 pr-4">
                   <StatusPill status={r.status} />
                 </td>
-                <td className="py-3.5 pr-4 tabular-nums">
+                <td className="py-2 pr-4 tabular-nums">
                   {r.elapsedHours === null ? (
                     <span className="text-neutral-400">–</span>
                   ) : (
@@ -133,16 +133,16 @@ export function ClientTable({ rows }: { rows: ClientRow[] }) {
                     </span>
                   )}
                 </td>
-                <td className="py-3.5 pr-4 tabular-nums">{formatSignUpDate(r.createdAt)}</td>
-                <td className="py-3.5 pr-4 tabular-nums">{r.sessionHours ?? ""}</td>
-                <td className="py-3.5 pr-4" title={r.suburb}>
+                <td className="py-2 pr-4 tabular-nums">{formatSignUpDate(r.createdAt)}</td>
+                <td className="py-2 pr-4 tabular-nums">{r.sessionHours ?? ""}</td>
+                <td className="py-2 pr-4" title={r.suburb}>
                   {r.state ?? "–"}
                 </td>
-                <td className="py-3.5 pr-4 uppercase">{FUNDING_SHORT[r.funding]}</td>
-                <td className="py-3.5 pr-4 md:pr-8">
+                <td className="py-2 pr-4 uppercase">{FUNDING_SHORT[r.funding]}</td>
+                <td className="py-2 pr-4 md:pr-8">
                   <Link
                     href={`/families/${r.id}`}
-                    className="inline-flex items-center gap-1 rounded text-sm text-neutral-400 opacity-60 hover:text-neutral-900 focus-visible:opacity-100 group-hover:opacity-100"
+                    className="inline-flex items-center gap-1 rounded text-xs text-neutral-400 opacity-60 hover:text-neutral-900 focus-visible:opacity-100 group-hover:opacity-100"
                   >
                     Open <ArrowRightIcon className="size-3.5" />
                     <span className="sr-only">{r.name}&apos;s full record</span>
@@ -175,5 +175,5 @@ export function StatusPill({ status }: { status: FamilyStatus }) {
         : ["lost", "not_suitable", "withdrawn"].includes(status)
           ? "bg-neutral-100 text-neutral-500"
           : "bg-neutral-200/70 text-neutral-800";
-  return <span className={cn("inline-block whitespace-nowrap rounded px-2 py-1 text-sm leading-none", tone)}>{CLIENT_STATUS_LABELS[status]}</span>;
+  return <span className={cn("inline-block whitespace-nowrap rounded px-1.5 py-1 text-xs leading-none", tone)}>{CLIENT_STATUS_LABELS[status]}</span>;
 }
