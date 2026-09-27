@@ -22,7 +22,7 @@ export function Sidebar({ name, role }: { name: string; role: string }) {
         </Link>
       </div>
       <nav aria-label="Main" className="overflow-x-auto px-3 md:px-6">
-        <ul className="flex gap-1 md:flex-col md:gap-1.5">
+        <ul className="flex gap-1 md:flex-col md:gap-0.5">
           {LINKS.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || pathname.startsWith(`${href}/`);
             return (
@@ -31,11 +31,11 @@ export function Sidebar({ name, role }: { name: string; role: string }) {
                   href={href}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex min-h-11 items-center gap-3 whitespace-nowrap rounded-lg px-3 text-[15px] md:text-lg",
+                    "flex min-h-8 items-center gap-2.5 whitespace-nowrap rounded-md px-3 text-sm",
                     active ? "bg-neutral-200/80 text-neutral-900" : "text-neutral-700 hover:bg-neutral-200/50 hover:text-neutral-900",
                   )}
                 >
-                  <Icon className="size-4 text-neutral-500" />
+                  <Icon className="size-3.5 text-neutral-500" />
                   {label}
                 </Link>
               </li>
