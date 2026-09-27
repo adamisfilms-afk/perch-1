@@ -7,9 +7,9 @@ import { createClient } from "@/lib/supabase/server";
 import { daysUntil, relativeHours, todayInAustralia } from "@/lib/time";
 import type { ClinicianRow, CredentialRow, PipelineRow } from "@/lib/types";
 
-export const metadata = { title: "Dashboard" };
+export const metadata = { title: "Today" };
 
-export default async function Dashboard() {
+export default async function Today() {
   const viewer = await requireStaff();
   const supabase = await createClient();
   const today = todayInAustralia();
