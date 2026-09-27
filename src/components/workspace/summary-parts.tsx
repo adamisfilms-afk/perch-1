@@ -43,7 +43,7 @@ export function PageTabsHeader({ label, tabs, actions }: { label: string; tabs: 
   );
 }
 
-/** The header of a summary page: the page itself (the default tab), then a Dashboard tab that isn't wired up yet. */
+/** The header of a summary page: the page itself (the default tab), then an Analytics tab that isn't wired up yet. */
 export function SummaryHeader({
   label,
   count,
@@ -60,7 +60,7 @@ export function SummaryHeader({
       label={label}
       tabs={[
         { href: "#", label, active: true, count, countTitle },
-        { href: "#", label: "Dashboard" },
+        { href: "#", label: "Analytics" },
       ]}
       actions={actions}
     />
