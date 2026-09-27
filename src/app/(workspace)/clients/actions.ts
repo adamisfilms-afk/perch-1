@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import type { ActionState } from "@/components/forms";
+import type { Booking } from "@/components/workspace/detail-parts";
 import { friendlyError, requireStaff } from "@/lib/auth";
 import { STEP_TARGET_STATUSES } from "@/lib/client-summary";
 import type { Profession } from "@/lib/domain";
@@ -30,6 +31,10 @@ export interface ClientDetail {
     first_session_at: string | null;
   }[];
   history: { from_status: string | null; to_status: string; reason: string | null; by: string | null; at: string }[];
+  /** Sign-up calls, intro calls and first sessions, in no particular order. */
+  bookings: Booking[];
+  /** When this was loaded: splits bookings into upcoming and past. */
+  loadedAt: number;
 }
 
 /** Everything about one client, for the summary modal. Reads as the signed-in user, so RLS applies, and logs the view. */
@@ -44,10 +49,10 @@ export async function getClientDetail(id: string): Promise<{ ok: true; detail: C
   const [children, consents, intake, matches, history, people] = await Promise.all([
     supabase.from("children").select("*").eq("family_id", id).order("created_at"),
     supabase.from("consents").select("type, version, granted_at, withdrawn_at").eq("family_id", id).order("granted_at"),
-    supabase.from("intake_calls").select("scheduled_at, completed_at, outcome, outcome_reason, notes").eq("family_id", id).order("created_at", { ascending: false }),
+    supabase.from("intake_calls").select("id, scheduled_at, completed_at, outcome, outcome_reason, notes").eq("family_id", id).order("created_at", { ascending: false }),
     supabase
       .from("matches")
-      .select("id, clinician_id, state, rank, distance_km, offered_at, responded_at, response_reason, clinicians(name), intro_calls(scheduled_at, outcome), conversions(first_session_at)")
+      .select("id, clinician_id, state, rank, distance_km, offered_at, responded_at, response_reason, clinicians(name), intro_calls(id, scheduled_at, outcome, reason), conversions(first_session_at)")
       .eq("family_id", id)
       .not("offered_at", "is", null)
       .order("offered_at", { ascending: false }),
@@ -66,9 +71,34 @@ export async function getClientDetail(id: string): Promise<{ ok: true; detail: C
     responded_at: string | null;
     response_reason: string | null;
     clinicians: { name: string } | { name: string }[] | null;
-    intro_calls: { scheduled_at: string | null; outcome: string | null }[] | null;
+    intro_calls: { id: string; scheduled_at: string | null; outcome: string | null; reason: string | null }[] | null;
     conversions: { first_session_at: string } | { first_session_at: string }[] | null;
   };
+  const matchRows = (matches.data ?? []) as unknown as MatchJoin[];
+  type IntakeJoin = { id: string; scheduled_at: string | null; completed_at: string | null; outcome: string | null; outcome_reason: string | null; notes: string | null };
+  const bookings: Booking[] = [
+    ...((intake.data ?? []) as IntakeJoin[]).flatMap((i) =>
+      i.scheduled_at || i.completed_at
+        ? [{
+            id: `intake-${i.id}`,
+            kind: "Sign-up call",
+            at: (i.scheduled_at ?? i.completed_at)!,
+            with: null,
+            detail: [i.completed_at ? `Done${i.outcome ? `: ${i.outcome.replaceAll("_", " ")}` : ""}` : null, i.outcome_reason, i.notes].filter(Boolean).join("\n") || null,
+          }]
+        : [],
+    ),
+    ...matchRows.flatMap((m) => {
+      const clinician = firstOf(m.clinicians)?.name ?? null;
+      const intros = (m.intro_calls ?? []).flatMap((c) =>
+        c.scheduled_at
+          ? [{ id: `intro-${c.id}`, kind: "Intro call", at: c.scheduled_at, with: clinician, detail: c.outcome ? [c.outcome.replaceAll("_", " "), c.reason].filter(Boolean).join(": ") : null }]
+          : [],
+      );
+      const first = firstOf(m.conversions)?.first_session_at;
+      return first ? [...intros, { id: `first-${m.id}`, kind: "First session", at: `${first.slice(0, 10)}T00:00:00+10:00`, with: clinician, detail: null, dateOnly: true }] : intros;
+    }),
+  ];
 
   return {
     ok: true,
@@ -77,7 +107,7 @@ export async function getClientDetail(id: string): Promise<{ ok: true; detail: C
       children: (children.data ?? []) as ChildRow[],
       consents: consents.data ?? [],
       intake: intake.data ?? [],
-      matches: ((matches.data ?? []) as unknown as MatchJoin[]).map((m) => {
+      matches: matchRows.map((m) => {
         const intro = firstOf(m.intro_calls);
         return {
           id: m.id,
@@ -95,6 +125,8 @@ export async function getClientDetail(id: string): Promise<{ ok: true; detail: C
         };
       }),
       history: (history.data ?? []).map((h: ClientDetail["history"][number]) => ({ ...h, by: h.by ? (names.get(h.by) ?? null) : null })),
+      bookings,
+      loadedAt: Date.now(),
     },
   };
 }

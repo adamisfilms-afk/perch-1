@@ -3,6 +3,7 @@ import { computeKpis } from "./client-summary";
 import {
   filterClinicians,
   firstSessionsByClinician,
+  outOfDateCount,
   parseStageTargets,
   sortClinicians,
   stageOf,
@@ -81,5 +82,19 @@ describe("clinician KPIs", () => {
     expect(k.active).toBe(1);
     expect(k.activeRatePct).toBe(50);
     expect(k.signupToSessionHours).toBe(10 * 24);
+  });
+});
+
+describe("documents out of date", () => {
+  it("counts the newest document of each type that has expired or passed its expiry date", () => {
+    const docs = [
+      { type: "wwcc", status: "verified", expires_at: "2026-09-01" }, // passed, not yet marked expired
+      { type: "wwcc", status: "expired", expires_at: "2025-01-01" }, // older copy: ignored
+      { type: "pi_insurance", status: "expired", expires_at: "2026-08-01" },
+      { type: "ahpra", status: "verified", expires_at: "2027-01-01" },
+      { type: "abn", status: "superseded", expires_at: null },
+      { type: "cv", status: "pending", expires_at: null },
+    ];
+    expect(outOfDateCount(docs, "2026-09-27")).toBe(2);
   });
 });

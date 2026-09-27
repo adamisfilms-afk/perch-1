@@ -2,9 +2,11 @@ import Link from "next/link";
 import { SimpleActionButton } from "@/components/forms";
 import { notFound } from "next/navigation";
 import { AvailabilityForm, ClinicianProfileForm } from "@/components/clinician-profile-form";
-import { ClinicianStatusBadge, CredentialStatusBadge, DateOnly, When, credentialLabel } from "@/components/display";
-import { Alert, Badge, Card, CardTitle, DefinitionList, EmptyState, PageHeader } from "@/components/ui";
+import { CredentialStatusBadge, DateOnly, When, credentialLabel } from "@/components/display";
+import { Alert, Badge, Card, CardTitle, DefinitionList, EmptyState } from "@/components/ui";
+import { RecordHeader } from "@/components/workspace/summary-parts";
 import { requireStaff } from "@/lib/auth";
+import { outOfDateCount, stageOf } from "@/lib/clinician-summary";
 import {
   AGE_GROUP_LABELS,
   CLINICIAN_STATUS_LABELS,
@@ -24,23 +26,70 @@ import {
 import { formatAuMobile } from "@/lib/phone";
 import { createClient } from "@/lib/supabase/server";
 import { todayInAustralia } from "@/lib/time";
-import type { AvailabilityRow, ClinicianRow, CredentialRow, StatusHistoryRow } from "@/lib/types";
+import { firstOf, type AvailabilityRow, type ClinicianRow, type CredentialRow, type StatusHistoryRow } from "@/lib/types";
+import { getClinicianDetail } from "../actions";
+import { ClinicianBookings, ClinicianDocuments, ClinicianHistory, clinicianTabs } from "../clinician-detail";
+import { StagePill } from "../clinician-table";
 import * as actions from "./actions";
 import { AbnForm, AgreementSignedForm, IntakeCallForm, NotesForm, OffboardingForm, SightedForm, StatusForm, VerifyForm } from "./clinician-forms";
 
 export const metadata = { title: "Clinician" };
 
+const TAB_IDS = ["overview", "documents", "bookings", "history"];
+
+function Header({ clinician, activeClients, outOfDate, tab }: { clinician: ClinicianRow; activeClients: number; outOfDate: number; tab: string }) {
+  return (
+    <RecordHeader
+      back={{ href: "/clinicians", label: "Clinicians" }}
+      title={clinician.name}
+      subtitle={
+        <span className="flex flex-wrap items-center gap-2">
+          <span>{PROFESSION_LABELS[clinician.profession]} ·</span>
+          <StagePill stage={stageOf(clinician, activeClients)} />
+          {clinician.ndis_registered && <Badge tone="blue">NDIS registered</Badge>}
+        </span>
+      }
+      tabs={[{ id: "overview", label: "Overview" }, ...clinicianTabs(null).filter((t) => t.id !== "info")].map((t) => (t.id === "documents" ? { ...t, alert: outOfDate } : t))}
+      active={tab}
+      basePath={`/clinicians/${clinician.id}`}
+    />
+  );
+}
+
 export default async function ClinicianPage({ params, searchParams }: PageProps<"/clinicians/[id]">) {
   const viewer = await requireStaff();
   const { id } = await params;
-  const { notice } = await searchParams;
+  const { notice, tab: tabParam } = await searchParams;
+  const tab = TAB_IDS.includes(tabParam as string) ? (tabParam as string) : "overview";
+
+  // Documents, Bookings and History show the same views as the clinician summary modal (which logs the view itself).
+  if (tab !== "overview") {
+    const result = await getClinicianDetail(id);
+    if (!result.ok) notFound();
+    const { detail } = result;
+    return (
+      <div className="flex min-h-full flex-col">
+        <Header
+          clinician={detail.clinician}
+          activeClients={detail.clients.filter((c) => c.status === "converted").length}
+          outOfDate={detail.outOfDate}
+          tab={tab}
+        />
+        <div className="max-w-3xl px-4 py-6 md:px-8">
+          {tab === "documents" ? <ClinicianDocuments detail={detail} /> : tab === "bookings" ? <ClinicianBookings detail={detail} /> : <ClinicianHistory detail={detail} />}
+        </div>
+      </div>
+    );
+  }
+
   const supabase = await createClient();
   const { data: clinician } = await supabase.from("clinicians").select("*").eq("id", id).maybeSingle<ClinicianRow>();
   if (!clinician) notFound();
   await supabase.rpc("log_access", { p_entity_type: "clinicians", p_entity_id: id, p_action: "view" });
 
-  const [{ data: creds }, { data: slots }, { data: agreements }, { data: gaps }, { data: history }, { data: matches }, { data: offboarding }, { data: people }] =
+  const [{ data: allocated }, { data: creds }, { data: slots }, { data: agreements }, { data: gaps }, { data: history }, { data: matches }, { data: offboarding }, { data: people }] =
     await Promise.all([
+      supabase.from("matches").select("families(status)").eq("clinician_id", id).eq("state", "accepted"),
       supabase.from("credentials").select("*").eq("clinician_id", id).order("created_at", { ascending: false }),
       supabase.from("availability").select("*").eq("clinician_id", id).order("day_of_week").order("start_time"),
       supabase.from("agreements").select("*").eq("clinician_id", id).order("created_at", { ascending: false }),
@@ -67,18 +116,14 @@ export default async function ClinicianPage({ params, searchParams }: PageProps<
   const sightedTypes: CredentialType[] = ["drivers_licence", "car_insurance"];
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={clinician.name}
-        description={
-          <span className="flex flex-wrap items-center gap-2">
-            <ClinicianStatusBadge status={clinician.status} pauseReason={clinician.pause_reason} />
-            {PROFESSION_LABELS[clinician.profession]}
-            {clinician.ndis_registered && <Badge tone="blue">NDIS registered</Badge>}
-          </span>
-        }
-        actions={<Link href="/clinicians" className="text-sm text-brand-700 underline">← All clinicians</Link>}
+    <div className="flex min-h-full flex-col">
+      <Header
+        clinician={clinician}
+        activeClients={((allocated ?? []) as unknown as { families: { status: string } | { status: string }[] | null }[]).filter((m) => firstOf(m.families)?.status === "converted").length}
+        outOfDate={outOfDateCount(credentials, today)}
+        tab="overview"
       />
+      <div className="space-y-6 px-4 py-6 md:px-8">
 
       {notice === "verified" && <Alert tone="green">Document verified.</Alert>}
       {notice === "rejected" && <Alert tone="green">Document rejected. The clinician has been asked for a new copy.</Alert>}
@@ -319,6 +364,7 @@ export default async function ClinicianPage({ params, searchParams }: PageProps<
             </ol>
           </Card>
         </div>
+      </div>
       </div>
     </div>
   );

@@ -283,6 +283,7 @@ export const CREDENTIAL_TYPES = [
   "ndis_registration",
   "drivers_licence",
   "car_insurance",
+  "cv",
 ] as const;
 export type CredentialType = (typeof CREDENTIAL_TYPES)[number];
 
@@ -378,6 +379,12 @@ export const CREDENTIALS: Record<CredentialType, CredentialInfo> = {
     verification: "Sight it and record the date (no copy stored)",
     expiryTracked: true,
     sightedOnly: true,
+  },
+  cv: {
+    label: "CV",
+    verification: "Read it before the intake call",
+    expiryTracked: false,
+    sightedOnly: false,
   },
 };
 

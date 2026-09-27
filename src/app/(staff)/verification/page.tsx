@@ -4,8 +4,8 @@ import { Alert, Card, EmptyState, PageHeader } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { CredentialRow } from "@/lib/types";
-import { verifyCredential } from "../clinicians/[id]/actions";
-import { VerifyForm } from "../clinicians/[id]/clinician-forms";
+import { verifyCredential } from "@/app/(workspace)/clinicians/[id]/actions";
+import { VerifyForm } from "@/app/(workspace)/clinicians/[id]/clinician-forms";
 
 export const metadata = { title: "Verification queue" };
 

@@ -182,3 +182,20 @@ export function firstSessionsByClinician(
     return at ? [{ created_at: c.created_at, first_session_at: at }] : [];
   });
 }
+
+/** Out of date: expired, or verified with an expiry date that has passed (before the nightly job marks it). */
+export function isOutOfDate(d: { status: string; expires_at: string | null }, today: string): boolean {
+  return d.status === "expired" || (d.status === "verified" && !!d.expires_at && d.expires_at < today);
+}
+
+/** How many of a clinician's current documents (the newest of each type, newest first in `docs`) are out of date. */
+export function outOfDateCount(docs: { type: string; status: string; expires_at: string | null }[], today: string): number {
+  const seen = new Set<string>();
+  let n = 0;
+  for (const d of docs) {
+    if (d.status === "superseded" || seen.has(d.type)) continue;
+    seen.add(d.type);
+    if (isOutOfDate(d, today)) n += 1;
+  }
+  return n;
+}

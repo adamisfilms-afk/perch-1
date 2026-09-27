@@ -2,16 +2,36 @@
 
 import { revalidatePath } from "next/cache";
 import type { ActionState } from "@/components/forms";
+import type { Booking } from "@/components/workspace/detail-parts";
 import { friendlyError, requireStaff } from "@/lib/auth";
 import { childFullName } from "@/lib/client-summary";
-import { ONBOARDING_STAGES } from "@/lib/clinician-summary";
+import { ONBOARDING_STAGES, isOutOfDate } from "@/lib/clinician-summary";
 import type { CredentialType, FamilyStatus } from "@/lib/domain";
 import { createClient } from "@/lib/supabase/server";
+import { todayInAustralia } from "@/lib/time";
 import { firstOf, type ClinicianRow, type CredentialRow } from "@/lib/types";
 
 export interface ClinicianDetail {
   clinician: ClinicianRow;
-  documents: { type: CredentialType; status: CredentialRow["status"]; expires_at: string | null }[];
+  /** The current document of each type (newest first), not counting superseded ones. */
+  documents: {
+    id: string;
+    type: CredentialType;
+    status: CredentialRow["status"];
+    expires_at: string | null;
+    number: string | null;
+    has_file: boolean;
+    sighted_only: boolean;
+    created_at: string;
+    verified_at: string | null;
+    out_of_date: boolean;
+  }[];
+  agreements: { version: string; sent_at: string | null; signed_at: string | null; documenso_ref: string | null }[];
+  /** Documents that have expired (or were verified with an expiry date that has now passed). */
+  outOfDate: number;
+  bookings: Booking[];
+  /** When this was loaded: splits bookings into upcoming and past. */
+  loadedAt: number;
   applicationGaps: string[];
   goLiveGaps: string[];
   clients: { family_id: string; name: string; status: FamilyStatus }[];
@@ -30,29 +50,78 @@ export async function getClinicianDetail(id: string): Promise<{ ok: true; detail
   await supabase.rpc("log_access", { p_entity_type: "clinicians", p_entity_id: id, p_action: "view" });
 
   const [documents, applicationGaps, goLiveGaps, matches, history, people] = await Promise.all([
-    supabase.from("credentials").select("type, status, expires_at").eq("clinician_id", id).in("status", ["pending", "verified", "expired", "rejected"]).order("created_at", { ascending: false }),
+    supabase
+      .from("credentials")
+      .select("id, type, status, expires_at, number, file_path, sighted_only, created_at, verified_at")
+      .eq("clinician_id", id)
+      .in("status", ["pending", "verified", "expired", "rejected"])
+      .order("created_at", { ascending: false }),
     supabase.rpc("clinician_application_gaps", { p_clinician: id }),
     supabase.rpc("clinician_go_live_gaps", { p_clinician: id }),
-    supabase.from("matches").select("family_id, families(status, children(first_name, last_name))").eq("clinician_id", id).eq("state", "accepted"),
+    supabase
+      .from("matches")
+      .select("id, family_id, state, families(status, children(first_name, last_name)), intro_calls(id, scheduled_at, outcome, reason), conversions(first_session_at)")
+      .eq("clinician_id", id)
+      .in("state", ["accepted", "withdrawn"]),
     supabase.from("status_history").select("from_status, to_status, reason, by, at").eq("entity_type", "clinician").eq("entity_id", id).order("at", { ascending: false }),
     supabase.from("profiles").select("id, full_name"),
   ]);
+  const { data: agreements } = await supabase
+    .from("agreements")
+    .select("version, sent_at, signed_at, documenso_ref")
+    .eq("clinician_id", id)
+    .order("created_at", { ascending: false });
   const names = new Map((people.data ?? []).map((p: { id: string; full_name: string }) => [p.id, p.full_name]));
   // The newest document of each type is the one that counts.
+  const today = todayInAustralia();
+  type DocRow = Omit<ClinicianDetail["documents"][number], "has_file" | "out_of_date"> & { file_path: string | null };
   const latest = new Map<string, ClinicianDetail["documents"][number]>();
-  for (const d of (documents.data ?? []) as ClinicianDetail["documents"]) if (!latest.has(d.type)) latest.set(d.type, d);
+  for (const d of (documents.data ?? []) as DocRow[]) {
+    if (latest.has(d.type)) continue;
+    const { file_path, ...rest } = d;
+    const out_of_date = isOutOfDate(d, today);
+    latest.set(d.type, { ...rest, has_file: !!file_path, out_of_date });
+  }
 
-  type MatchJoin = { family_id: string; families: One<{ status: FamilyStatus; children: { first_name: string; last_name: string | null }[] | null }> };
+  type MatchJoin = {
+    id: string;
+    family_id: string;
+    state: string;
+    families: One<{ status: FamilyStatus; children: { first_name: string; last_name: string | null }[] | null }>;
+    intro_calls: { id: string; scheduled_at: string | null; outcome: string | null; reason: string | null }[] | null;
+    conversions: One<{ first_session_at: string }>;
+  };
+  const matchRows = (matches.data ?? []) as unknown as MatchJoin[];
+  const clientName = (m: MatchJoin) => (firstOf(m.families)?.children ?? []).map(childFullName).join(" & ") || "Client";
+  const screeningAt = typeof clinician.application.screening_at === "string" ? clinician.application.screening_at : null;
+  const bookings: Booking[] = [
+    ...(screeningAt
+      ? [{ id: "intake", kind: "Intake call", at: screeningAt, with: "Perch team", detail: clinician.intake_completed_at ? "Done" : null }]
+      : []),
+    ...matchRows.flatMap((m) => {
+      const intros: Booking[] = (m.intro_calls ?? []).flatMap((c) =>
+        c.scheduled_at
+          ? [{ id: `intro-${c.id}`, kind: "Intro call", at: c.scheduled_at, with: clientName(m), detail: c.outcome ? [c.outcome.replaceAll("_", " "), c.reason].filter(Boolean).join(": ") : null }]
+          : [],
+      );
+      const first = firstOf(m.conversions)?.first_session_at;
+      return first ? [...intros, { id: `first-${m.id}`, kind: "First session", at: `${first.slice(0, 10)}T00:00:00+10:00`, with: clientName(m), detail: null, dateOnly: true }] : intros;
+    }),
+  ];
   return {
     ok: true,
     detail: {
       clinician,
       documents: [...latest.values()],
+      agreements: agreements ?? [],
+      outOfDate: [...latest.values()].filter((d) => d.out_of_date).length,
+      bookings,
+      loadedAt: Date.now(),
       applicationGaps: (applicationGaps.data as string[] | null) ?? [],
       goLiveGaps: (goLiveGaps.data as string[] | null) ?? [],
-      clients: ((matches.data ?? []) as unknown as MatchJoin[]).flatMap((m) => {
+      clients: matchRows.flatMap((m) => {
         const f = firstOf(m.families);
-        return f ? [{ family_id: m.family_id, name: (f.children ?? []).map(childFullName).join(" & ") || "Client", status: f.status }] : [];
+        return m.state === "accepted" && f ? [{ family_id: m.family_id, name: clientName(m), status: f.status }] : [];
       }),
       history: (history.data ?? []).map((h: ClinicianDetail["history"][number]) => ({ ...h, by: h.by ? (names.get(h.by) ?? null) : null })),
     },

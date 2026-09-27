@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { splitDaysHours, type ClientKpis } from "@/lib/client-summary";
 import { Sparkline, TickGauge } from "./charts";
+import { LinkTabs, type TabDef } from "./tabs";
 
 /**
  * The header of a summary page: "Dashboard" and the current page as tabs, with actions on the right.
@@ -33,6 +34,36 @@ export function SummaryHeader({
         </span>
       </nav>
       <div className="ml-auto flex items-center gap-2 self-center pt-2 sm:py-2">{actions}</div>
+    </header>
+  );
+}
+
+/** The header of a full record: back link, name, a line of status, and the record's tabs. */
+export function RecordHeader({
+  back,
+  title,
+  subtitle,
+  tabs,
+  active,
+  basePath,
+}: {
+  back: { href: string; label: string };
+  title: ReactNode;
+  subtitle?: ReactNode;
+  tabs: TabDef[];
+  active: string;
+  basePath: string;
+}) {
+  return (
+    <header className="border-b border-neutral-200 px-4 pt-4 md:px-8">
+      <Link href={back.href} className="text-sm text-neutral-500 hover:text-neutral-900">
+        ← {back.label}
+      </Link>
+      <h1 className="mt-2 text-xl font-semibold tracking-tight">{title}</h1>
+      {subtitle && <div className="mt-1 text-sm text-neutral-500">{subtitle}</div>}
+      <div className="mt-3">
+        <LinkTabs tabs={tabs} active={active} basePath={basePath} label="Record" />
+      </div>
     </header>
   );
 }

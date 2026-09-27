@@ -254,7 +254,7 @@ d("database", () => {
       await expect(db.q(user(userId), "update public.clinicians set application_submitted_at = now() where id = $1", [id])).rejects.toThrow(/ask the team/);
       await db.q(POSTGRES, "update public.clinicians set calcom_intro_url = 'https://cal.com/olivia/intro', age_groups = '{3-5}', funding_types = '{private}' where id = $1", [id]);
       await db.q(POSTGRES, "insert into public.availability (clinician_id, day_of_week, start_time, end_time) values ($1, 2, '15:00', '18:00')", [id]);
-      for (const t of ["ahpra", "wwcc", "ndis_worker_screening", "ndis_orientation", "pi_insurance", "pl_insurance", "abn"]) {
+      for (const t of ["ahpra", "wwcc", "ndis_worker_screening", "ndis_orientation", "pi_insurance", "pl_insurance", "abn", "cv"]) {
         await db.q(POSTGRES, "insert into public.credentials (clinician_id, type, status, expires_at) values ($1, $2, 'pending', '2030-01-01')", [id, t]);
       }
       await db.q(user(userId), "select public.submit_my_application('2026-09')");
