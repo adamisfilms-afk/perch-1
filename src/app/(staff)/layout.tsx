@@ -10,17 +10,17 @@ export default async function StaffLayout({ children }: LayoutProps<"/">) {
     supabase.from("families").select("id", { count: "exact", head: true }).eq("status", "waitlist"),
   ]);
   const links = [
+    { href: "/today", label: "Today" },
     { href: "/dashboard", label: "Dashboard" },
     { href: "/clients", label: "Clients" },
     { href: "/families", label: "Families" },
     { href: "/waitlist", label: "Waitlist", count: waitlist ?? 0 },
     { href: "/clinicians", label: "Clinicians" },
     { href: "/verification", label: "Verification", count: pending ?? 0 },
-    { href: "/metrics", label: "Metrics" },
     ...(viewer.role === "admin" ? [{ href: "/settings", label: "Settings" }] : []),
   ];
   return (
-    <AppShell viewer={viewer} links={links} home="/dashboard">
+    <AppShell viewer={viewer} links={links} home="/today">
       {children}
     </AppShell>
   );

@@ -4,10 +4,46 @@ import { splitDaysHours, type ClientKpis } from "@/lib/client-summary";
 import { Sparkline, TickGauge } from "./charts";
 import { LinkTabs, type TabDef } from "./tabs";
 
+export interface HeaderTab {
+  href: string;
+  label: string;
+  active?: boolean;
+  count?: number;
+  countTitle?: string;
+}
+
 /**
- * The header of a summary page: "Dashboard" and the current page as tabs, with actions on the right.
- * The header uses flex-wrap-reverse so the actions stack above the tabs on phones.
+ * The header of a workspace page: tabs on the left, actions on the right.
+ * It uses flex-wrap-reverse so the actions stack above the tabs on phones.
  */
+export function PageTabsHeader({ label, tabs, actions }: { label: string; tabs: HeaderTab[]; actions?: ReactNode }) {
+  return (
+    <header className="flex flex-wrap-reverse justify-between gap-x-4 border-b border-neutral-200 px-4 md:px-8">
+      {/* Stretches to the header's height with the tabs at the bottom, so the active underline sits on the border. */}
+      <nav aria-label={label} className="-mb-px flex items-end gap-6 overflow-x-auto md:gap-10">
+        {tabs.map((t) =>
+          t.active ? (
+            <span key={t.href} aria-current="page" className="flex items-center gap-2 whitespace-nowrap border-b-2 border-neutral-900 py-3 pr-2 text-sm font-medium md:py-3.5">
+              {t.label}
+              {t.count !== undefined && (
+                <span className="rounded bg-neutral-700 px-1.5 py-0.5 text-[10px] leading-none font-medium text-white" title={t.countTitle}>
+                  {t.count}
+                </span>
+              )}
+            </span>
+          ) : (
+            <Link key={t.href} href={t.href} className="whitespace-nowrap border-b-2 border-transparent py-3 text-sm text-neutral-700 hover:text-neutral-900 md:py-3.5">
+              {t.label}
+            </Link>
+          ),
+        )}
+      </nav>
+      {actions && <div className="ml-auto flex items-center gap-2 self-center pt-2 sm:py-2">{actions}</div>}
+    </header>
+  );
+}
+
+/** The header of a summary page: "Dashboard" and the current page as tabs, with actions on the right. */
 export function SummaryHeader({
   label,
   count,
@@ -20,21 +56,14 @@ export function SummaryHeader({
   actions: ReactNode;
 }) {
   return (
-    <header className="flex flex-wrap-reverse justify-between gap-x-4 border-b border-neutral-200 px-4 md:px-8">
-      {/* Stretches to the header's height with the tabs at the bottom, so the active underline sits on the border. */}
-      <nav aria-label={label} className="-mb-px flex items-end gap-6 overflow-x-auto md:gap-10">
-        <Link href="/dashboard" className="whitespace-nowrap border-b-2 border-transparent py-3 text-sm text-neutral-700 hover:text-neutral-900 md:py-3.5">
-          Dashboard
-        </Link>
-        <span aria-current="page" className="flex items-center gap-2 whitespace-nowrap border-b-2 border-neutral-900 py-3 pr-2 text-sm font-medium md:py-3.5">
-          {label}
-          <span className="rounded bg-neutral-700 px-1.5 py-0.5 text-[10px] leading-none font-medium text-white" title={countTitle}>
-            {count}
-          </span>
-        </span>
-      </nav>
-      <div className="ml-auto flex items-center gap-2 self-center pt-2 sm:py-2">{actions}</div>
-    </header>
+    <PageTabsHeader
+      label={label}
+      tabs={[
+        { href: "/dashboard", label: "Dashboard" },
+        { href: "#", label, active: true, count, countTitle },
+      ]}
+      actions={actions}
+    />
   );
 }
 
