@@ -11,8 +11,7 @@ Built from the product spec v0.1 (23 Sep 2026). This is the **MVP** scope (spec 
 | **Public forms** | Enquiry form (`/enquire`) and "Join the network" (`/join`), with server-side validation, Australian mobile checking, Turnstile, rate limiting and versioned consent. Submissions are saved even if email, SMS or the map service is down. |
 | **Client summary** | Redesigned workspace (`/clients`): KPI band (total, active share, sign-up to first session, new sign-ups) against targets, a sortable and searchable client table with time in the current step flagged against its target, a client details modal, and a settings modal (⋯) where admins set the step and KPI targets. |
 | **Family pipeline** | Board by status with stale highlighting (`/families`), family page with the structured intake script, status changes with reasons, timeline, messages and consent record. |
-| **Matching** | Rule-based hard filters and weighted score (spec C1–C2). Shows who passes, why others were ruled out, and a waitlist reason with codes for recruitment. A person saves the shortlist and a person approves it; complex cases need a clinical lead. |
-| **Referral offers** | One clinician at a time (or N in parallel, first to accept wins: a setting). 48h window, 24h SMS nudge, automatic move to the next clinician on decline or timeout. Clinicians see a de-identified summary until they accept. |
+| **Clinician allocation** | Staff pick the clinician from the client pop-up or the family page ("Allocate clinician", then "Edit" to change it). The family is emailed the clinician's intro-call link and the clinician is told to expect them; a changed clinician is told and gets the place back. Complex cases need a clinical lead. There is no automatic matching or area search. |
 | **Conversion** | Intro-call outcome, one-click "first session booked?" email link, automatic 2-week family and 6-week clinician follow-ups. |
 | **Clinician lifecycle** | Recruitment statuses, go-live checklist and gate, credential tracking and verification queue, "sighted only" for licence and car insurance, ABN Lookup, Documenso agreement, portal invites, off-boarding checklist. |
 | **Credential automation** | Daily job: 60/30/7-day reminders, staff alert at 7 days, automatic **Paused (credentials)** on expiry (open offers withdrawn), automatic reactivation once a new document is verified, yearly re-credentialing prompt. |
@@ -27,7 +26,7 @@ Built from the product spec v0.1 (23 Sep 2026). This is the **MVP** scope (spec 
 - The business rules live **in the database** (`supabase/migrations/`), so they hold whichever part of the system makes a change:
   - status machines for families and clinicians, with a history row for every change (who, when, why);
   - the **go-live gate** (no Active without verified, in-date documents, a signed agreement and clinical-lead approval);
-  - offers, timeouts and the next-on-shortlist logic;
+  - clinician allocation (`allocate_clinician`). The older shortlist/offer functions are still in the database but the app no longer uses them;
   - credential expiry, reminders and auto-pause/reactivation;
   - an **outbox** (`message_log`): database functions queue emails/SMS/Slack, the app sends them (`/api/cron/tick`, and straight after each action), retrying with backoff. Nothing is lost if a provider is down.
 - **Row-level security on every table.** Every role check also requires multi-factor login (`aal2`), so a stolen password alone can't read family data, even through the API. The public role has no table access at all. Clinicians see a family only after accepting it.
@@ -41,7 +40,6 @@ src/app/(workspace)  the redesigned workspace (sidebar layout): clients
 src/app/(staff)      dashboard, families, waitlist, clinicians, verification, metrics, settings
 src/app/(portal)     clinician portal
 src/app/api          Cal.com + Documenso webhooks, cron, signed file access
-src/lib/matching.ts  matching engine (pure, unit tested)
 supabase/migrations  schema, business rules, RLS, pg_cron, message templates
 tests/db             database tests on real Postgres (RLS, gate, offers, expiry…)
 ```
@@ -62,7 +60,7 @@ npm run dev
 
 Log in at http://localhost:3000/login with `admin@switchboard.test`, `coordinator@switchboard.test`, `lead@switchboard.test` or a clinician (`priya@switchboard.test`, `tom@…`, `grace@…`, `mia@…`, `sam@…`), password `switchboard-demo-2026`. You'll be asked to set up an authenticator app on first login.
 
-Without email/SMS keys, messages are marked **skipped** in the message log instead of sent. Without a Mapbox token, families aren't placed on the map and are flagged on the dashboard.
+Without email/SMS keys, messages are marked **skipped** in the message log instead of sent. A Mapbox token is optional: it only places clinicians on the map; families give their state on the enquiry form.
 
 ## Tests
 
@@ -85,7 +83,7 @@ The database tests build a throwaway database, apply every migration and act as 
 
 ## Decisions on the open questions (spec §15)
 
-All of these are settings or easy to change, so they can be revisited without code changes where noted.
+All of these are settings or easy to change, so they can be revisited without code changes where noted. (Questions 1 and 2 applied to the offer flow, which staff allocation has replaced.)
 
 1. **One at a time or parallel?** Sequential by default. Parallel (first to accept wins, N at once) is the `offer_mode` / `parallel_offer_count` setting.
 2. **Response window and timeout?** 48 hours (`offer_response_hours`), SMS nudge at 24 (`offer_nudge_hours`). On timeout the next approved clinician is offered; when the shortlist runs out the family returns to Ready to match and coordinators are alerted.

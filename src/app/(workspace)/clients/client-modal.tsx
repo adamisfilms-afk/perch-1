@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
+import { AllocateClinician } from "@/components/workspace/allocate-clinician";
 import { Modal } from "@/components/workspace/modal";
-import { CLIENT_STATUS_LABELS, FUNDING_SHORT, childFullName, formatElapsed, type ClientRow } from "@/lib/client-summary";
+import { CLIENT_STATUS_LABELS, FUNDING_SHORT, allocationBlockedReason, childFullName, formatElapsed, type ClientRow } from "@/lib/client-summary";
 import {
   CONCERN_LABELS,
   FUNDING_LABELS,
@@ -30,6 +31,7 @@ type Loaded = { id: string; detail: ClientDetail } | { id: string; error: string
 
 export function ClientModal({ row, onClose }: { row: ClientRow | null; onClose: () => void }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     if (!row) return;
@@ -40,7 +42,7 @@ export function ClientModal({ row, onClose }: { row: ClientRow | null; onClose: 
     return () => {
       cancelled = true;
     };
-  }, [row]);
+  }, [row, version]);
 
   const current = row && loaded?.id === row.id ? loaded : null;
 
@@ -70,7 +72,7 @@ export function ClientModal({ row, onClose }: { row: ClientRow | null; onClose: 
       footer={
         row && (
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-neutral-500">Change status, run matching and record outcomes from the full record.</p>
+            <p className="text-sm text-neutral-500">Change status and record outcomes from the full record.</p>
             <Link href={`/families/${row.id}`} className="inline-flex min-h-10 items-center rounded-md bg-neutral-950 px-4 text-sm font-medium text-white hover:bg-neutral-800">
               Open full record
             </Link>
@@ -87,16 +89,26 @@ export function ClientModal({ row, onClose }: { row: ClientRow | null; onClose: 
           {current.error}
         </p>
       ) : (
-        <Detail detail={current.detail} />
+        <Detail detail={current.detail} onChanged={() => setVersion((v) => v + 1)} />
       )}
     </Modal>
   );
 }
 
-function Detail({ detail }: { detail: ClientDetail }) {
+function Detail({ detail, onChanged }: { detail: ClientDetail; onChanged: () => void }) {
   const { family, children, consents, intake, matches, history } = detail;
+  const allocated = matches.find((m) => m.state === "accepted");
   return (
     <div className="space-y-8">
+      <Section title="Clinician">
+        <AllocateClinician
+          familyId={family.id}
+          current={allocated ? { id: allocated.clinician_id, name: allocated.clinician ?? "Clinician" } : null}
+          blockedReason={allocationBlockedReason(family.status)}
+          onAllocated={onChanged}
+        />
+      </Section>
+
       <Section title="Contact">
         <Facts
           items={[
@@ -144,9 +156,9 @@ function Detail({ detail }: { detail: ClientDetail }) {
         </Section>
       ))}
 
-      <Section title="Clinician offers">
+      <Section title="Clinician history">
         {!matches.length ? (
-          <Empty>No offers sent yet.</Empty>
+          <Empty>No clinician allocated yet.</Empty>
         ) : (
           <ul className="divide-y divide-neutral-100">
             {matches.map((m) => (
@@ -154,8 +166,7 @@ function Detail({ detail }: { detail: ClientDetail }) {
                 <div>
                   <p className="font-medium text-neutral-900">{m.clinician ?? "Clinician"}</p>
                   <p className="text-neutral-500">
-                    Offered {formatDateTime(m.offered_at)}
-                    {m.distance_km !== null && ` · ${m.distance_km} km away`}
+                    Allocated {formatDateTime(m.offered_at)}
                     {m.response_reason && ` · “${m.response_reason}”`}
                   </p>
                   {(m.intro_at || m.intro_outcome) && (

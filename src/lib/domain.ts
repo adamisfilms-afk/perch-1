@@ -51,18 +51,35 @@ export const FUNNEL_STATUSES: FamilyStatus[] = [
 ];
 export const EXIT_STATUSES: FamilyStatus[] = ["waitlist", "lost", "not_suitable", "withdrawn"];
 
+/** Statuses where staff can allocate (or change) a client's clinician. Mirrors public.allocate_clinician(). */
+export const ALLOCATABLE_STATUSES: FamilyStatus[] = ["ready_to_match", "waitlist", "offered", "accepted", "intro_booked", "intro_done"];
+
+/** Australian states and territories, as stored in families.state. */
+export const AU_STATES = ["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"] as const;
+export type AuState = (typeof AU_STATES)[number];
+export const AU_STATE_LABELS: Record<AuState, string> = {
+  ACT: "Australian Capital Territory",
+  NSW: "New South Wales",
+  NT: "Northern Territory",
+  QLD: "Queensland",
+  SA: "South Australia",
+  TAS: "Tasmania",
+  VIC: "Victoria",
+  WA: "Western Australia",
+};
+
 /** Mirrors private.family_transition_allowed() in the database. */
 export const FAMILY_TRANSITIONS: Record<FamilyStatus, FamilyStatus[]> = {
   new: ["contacted", "intake_booked", "intake_done", "lost", "not_suitable", "withdrawn"],
   contacted: ["intake_booked", "intake_done", "lost", "not_suitable", "withdrawn"],
   intake_booked: ["intake_done", "contacted", "lost", "not_suitable", "withdrawn"],
   intake_done: ["ready_to_match", "contacted", "not_suitable", "lost", "withdrawn"],
-  ready_to_match: ["offered", "waitlist", "lost", "withdrawn"],
+  ready_to_match: ["offered", "accepted", "waitlist", "lost", "withdrawn"],
   offered: ["accepted", "ready_to_match", "waitlist", "lost", "withdrawn"],
   accepted: ["intro_booked", "intro_done", "converted", "ready_to_match", "lost", "withdrawn"],
   intro_booked: ["intro_done", "converted", "accepted", "ready_to_match", "lost", "withdrawn"],
-  intro_done: ["converted", "ready_to_match", "lost", "withdrawn"],
-  waitlist: ["ready_to_match", "offered", "lost", "not_suitable", "withdrawn"],
+  intro_done: ["converted", "accepted", "ready_to_match", "lost", "withdrawn"],
+  waitlist: ["ready_to_match", "offered", "accepted", "lost", "not_suitable", "withdrawn"],
   lost: ["contacted"],
   not_suitable: ["contacted"],
   withdrawn: ["contacted"],
@@ -401,7 +418,7 @@ export function goLiveGapLabel(gap: string): string {
 export const MATCH_STATE_LABELS: Record<string, string> = {
   proposed: "On shortlist",
   offered: "Offered",
-  accepted: "Accepted",
+  accepted: "Allocated",
   declined: "Declined",
   timeout: "Timed out",
   withdrawn: "Withdrawn",

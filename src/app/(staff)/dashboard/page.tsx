@@ -43,7 +43,6 @@ export default async function Dashboard() {
     const key = f.waitlist_reason ?? "No reason recorded";
     waitlistReasons.set(key, (waitlistReasons.get(key) ?? 0) + 1);
   }
-  const ungeocoded = families.filter((f) => !f.geocoded);
 
   type OfferRow = { id: string; family_id: string; offered_at: string; offer_expires_at: string; clinicians: { name: string }; children: { first_name: string } };
   type ExpiringRow = Pick<CredentialRow, "id" | "type" | "expires_at" | "clinician_id"> & { clinicians: { name: string } };
@@ -174,21 +173,6 @@ export default async function Dashboard() {
           )}
         </Card>
 
-        {ungeocoded.length > 0 && (
-          <Card>
-            <CardTitle>Suburbs not on the map ({ungeocoded.length})</CardTitle>
-            <p className="mb-2 text-sm text-stone-600">These families can only match on suburb lists until their location is fixed.</p>
-            <ul className="space-y-1 text-sm">
-              {ungeocoded.map((f) => (
-                <li key={f.id}>
-                  <Link href={`/families/${f.id}`} className="hover:underline">
-                    {f.parent_name} · {f.suburb} {f.postcode}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
       </div>
     </div>
   );

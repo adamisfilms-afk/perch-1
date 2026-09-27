@@ -21,7 +21,7 @@ export default async function ProfilePage() {
   const due = !me.last_recredentialed_at || daysSince(me.last_recredentialed_at) > 330;
   return (
     <div className="space-y-6">
-      <PageHeader title="Profile & availability" description="This is what matching uses. Keep it current and you'll get referrals that suit you." />
+      <PageHeader title="Profile & availability" description="Our team uses this when allocating families to you. Keep it current so you get referrals that suit you." />
       {due && (
         <Card className="border-amber-300 bg-amber-50">
           <CardTitle>Yearly check-in</CardTitle>

@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { isValidAbn, cleanAbn } from "./abn";
-import { ENQUIRY_CONCERNS, FUNDING_TYPES, PROFESSIONS, SERVICE_TYPES, SPECIAL_INTERESTS, TIME_BLOCKS } from "./domain";
+import { AU_STATES, ENQUIRY_CONCERNS, FUNDING_TYPES, PROFESSIONS, SERVICE_TYPES, SPECIAL_INTERESTS, TIME_BLOCKS } from "./domain";
 import { normaliseAuMobile } from "./phone";
 import { todayInAustralia } from "./time";
 
@@ -31,6 +31,7 @@ export const enquirySchema = z
     mobile,
     suburb: trimmed(100),
     postcode,
+    state: z.enum(AU_STATES, { error: "Choose your state or territory" }),
     child_first_name: trimmed(100),
     child_last_name: trimmed(100),
     dob: z.preprocess(emptyToUndefined, z.iso.date().optional()),

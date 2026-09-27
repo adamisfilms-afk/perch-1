@@ -87,6 +87,7 @@ describe("enquiry validation", () => {
     mobile: "0412 345 678",
     suburb: "Parramatta",
     postcode: "2150",
+    state: "NSW",
     child_first_name: "Alex",
     child_last_name: "Parent",
     age_years: "5",

@@ -3,6 +3,7 @@
 import { ActionForm, SubmitButton, type FormAction } from "@/components/forms";
 import { Checkbox, CheckboxGroup, Field, Input, Select, Textarea } from "@/components/ui";
 import {
+  AU_STATES,
   CONCERN_LABELS,
   CONCERNS,
   FAMILY_STATUS_LABELS,
@@ -41,12 +42,15 @@ export function FamilyDetailsForm({ action, family }: { action: FormAction; fami
         <Field label="Postcode" name="postcode">
           <Input name="postcode" inputMode="numeric" maxLength={4} defaultValue={family.postcode} />
         </Field>
+        <Field label="State" name="state">
+          <Select name="state" placeholder="Choose…" options={AU_STATES.map((s) => [s, s] as const)} defaultValue={family.state ?? ""} />
+        </Field>
         <Field label="Plan manager" name="plan_manager">
           <Input name="plan_manager" defaultValue={family.plan_manager ?? ""} />
         </Field>
       </div>
       <Checkbox name="complex_case" defaultChecked={family.complex_case}>
-        Complex case: a clinical lead must approve the match
+        Complex case: a clinical lead must allocate the clinician
       </Checkbox>
       <SubmitButton variant="secondary" size="sm">
         Save family details
@@ -227,61 +231,6 @@ export function IntakeForm({ action, family, child, previous }: {
         </Field>
       </fieldset>
       <SubmitButton>Save intake</SubmitButton>
-    </ActionForm>
-  );
-}
-
-export interface ShortlistOption {
-  id: string;
-  name: string;
-  score: number;
-  distance: string;
-  notes: string[];
-  breakdown: Record<string, number>;
-}
-
-export function ShortlistForm({ action, options }: { action: FormAction; options: ShortlistOption[] }) {
-  return (
-    <ActionForm action={action}>
-      <ol className="space-y-2">
-        {options.map((o, i) => (
-          <li key={o.id}>
-            <label className="flex cursor-pointer gap-3 rounded-lg border border-stone-200 p-3 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50">
-              <input type="checkbox" name="clinician_id" value={o.id} defaultChecked={i < 3} className="mt-1 size-4 accent-brand-600" />
-              <span className="flex-1 text-sm">
-                <span className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-medium">
-                    {i + 1}. {o.name}
-                  </span>
-                  <span className="text-stone-600">
-                    Score <strong>{o.score}</strong> · {o.distance}
-                  </span>
-                </span>
-                {o.notes.length > 0 && <span className="mt-1 block text-stone-600">{o.notes.join(" · ")}</span>}
-                <span className="mt-1 block text-xs text-stone-500">
-                  {Object.entries(o.breakdown)
-                    .map(([k, v]) => `${k} ${v}`)
-                    .join(" · ")}
-                </span>
-              </span>
-            </label>
-          </li>
-        ))}
-      </ol>
-      <SubmitButton variant="secondary">Save as shortlist</SubmitButton>
-    </ActionForm>
-  );
-}
-
-export function WithdrawForm({ action }: { action: FormAction }) {
-  return (
-    <ActionForm action={action} confirm="Withdraw this offer? The next clinician on the shortlist will be offered.">
-      <div className="flex gap-2">
-        <Input name="reason" aria-label="Reason for withdrawing" placeholder="Reason" className="min-w-0" />
-        <SubmitButton variant="secondary" size="sm">
-          Withdraw
-        </SubmitButton>
-      </div>
     </ActionForm>
   );
 }

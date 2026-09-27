@@ -112,7 +112,6 @@ function FamilyCard({ f }: { f: PipelineRow }) {
       <span className="mt-1 flex flex-wrap items-center gap-1">
         <Badge>{FUNDING_LABELS[f.funding_type]}</Badge>
         {f.complex_case && <Badge tone="violet">Complex</Badge>}
-        {!f.geocoded && <Badge tone="amber">Not on map</Badge>}
         <span className={cn("ml-auto text-xs", f.is_stale ? "font-semibold text-red-700" : "text-stone-500")}>{relativeHours(f.hours_in_status)}</span>
       </span>
     </Link>

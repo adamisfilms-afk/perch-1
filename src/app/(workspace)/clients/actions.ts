@@ -1,9 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import type { ActionState } from "@/components/forms";
 import { friendlyError, requireStaff } from "@/lib/auth";
 import { STEP_TARGET_STATUSES } from "@/lib/client-summary";
+import type { Profession } from "@/lib/domain";
+import { drainOutboxQuietly } from "@/lib/notifications/outbox";
 import { createClient } from "@/lib/supabase/server";
 import { firstOf, type ChildRow, type FamilyRow } from "@/lib/types";
 
@@ -14,6 +17,7 @@ export interface ClientDetail {
   intake: { scheduled_at: string | null; completed_at: string | null; outcome: string | null; outcome_reason: string | null; notes: string | null }[];
   matches: {
     id: string;
+    clinician_id: string;
     clinician: string | null;
     state: string;
     rank: number;
@@ -43,7 +47,7 @@ export async function getClientDetail(id: string): Promise<{ ok: true; detail: C
     supabase.from("intake_calls").select("scheduled_at, completed_at, outcome, outcome_reason, notes").eq("family_id", id).order("created_at", { ascending: false }),
     supabase
       .from("matches")
-      .select("id, state, rank, distance_km, offered_at, responded_at, response_reason, clinicians(name), intro_calls(scheduled_at, outcome), conversions(first_session_at)")
+      .select("id, clinician_id, state, rank, distance_km, offered_at, responded_at, response_reason, clinicians(name), intro_calls(scheduled_at, outcome), conversions(first_session_at)")
       .eq("family_id", id)
       .not("offered_at", "is", null)
       .order("offered_at", { ascending: false }),
@@ -54,6 +58,7 @@ export async function getClientDetail(id: string): Promise<{ ok: true; detail: C
 
   type MatchJoin = {
     id: string;
+    clinician_id: string;
     state: string;
     rank: number;
     distance_km: number | null;
@@ -76,6 +81,7 @@ export async function getClientDetail(id: string): Promise<{ ok: true; detail: C
         const intro = firstOf(m.intro_calls);
         return {
           id: m.id,
+          clinician_id: m.clinician_id,
           clinician: firstOf(m.clinicians)?.name ?? null,
           state: m.state,
           rank: m.rank,
@@ -138,4 +144,48 @@ export async function saveClientTargets(_prev: ActionState, fd: FormData): Promi
   revalidatePath("/clients");
   revalidatePath("/settings");
   return { ok: true, message: "Targets saved" };
+}
+
+export interface AllocatableClinician {
+  id: string;
+  name: string;
+  profession: Profession;
+  suburb: string | null;
+  capacity: number;
+  /** Families are emailed this link, so a clinician without one can't be allocated yet. */
+  hasIntroLink: boolean;
+}
+
+/** Active clinicians staff can allocate a client to, by name. */
+export async function listAllocatableClinicians(): Promise<AllocatableClinician[]> {
+  await requireStaff();
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("clinicians")
+    .select("id, name, profession, suburb, capacity_new, calcom_intro_url")
+    .eq("status", "active")
+    .order("name");
+  return (data ?? []).map(
+    (c: { id: string; name: string; profession: Profession; suburb: string | null; capacity_new: number; calcom_intro_url: string | null }) => ({
+      id: c.id,
+      name: c.name,
+      profession: c.profession,
+      suburb: c.suburb,
+      capacity: c.capacity_new,
+      hasIntroLink: !!c.calcom_intro_url,
+    }),
+  );
+}
+
+/** Allocate (or change) a client's clinician. The database does the work and queues the emails to both. */
+export async function allocateClinician(familyId: string, clinicianId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireStaff();
+  if (!clinicianId) return { ok: false, error: "Choose a clinician" };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("allocate_clinician", { p_family: familyId, p_clinician: clinicianId });
+  if (error) return { ok: false, error: friendlyError(error) };
+  revalidatePath("/clients");
+  revalidatePath(`/families/${familyId}`);
+  after(drainOutboxQuietly);
+  return { ok: true };
 }
