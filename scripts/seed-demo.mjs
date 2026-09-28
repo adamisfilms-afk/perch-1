@@ -1,7 +1,7 @@
 // Demo data for local development and previews. NEVER run against production.
 //   node --env-file=.env.local scripts/seed-demo.mjs
-// Creates staff and clinician logins (password: see DEMO_PASSWORD), a small network of
-// Sydney clinicians and families at each stage of the funnel.
+// Creates staff logins (password: see DEMO_PASSWORD), a small network of Sydney clinicians
+// (who don't log in: open their record for their private link) and families at each stage of the funnel.
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -50,12 +50,10 @@ async function main() {
       ids[c.email] = existing.id;
       continue;
     }
-    const userId = await user(c.email, c.name, "clinician");
     const row = must(
       await db
         .from("clinicians")
         .insert({
-          user_id: userId,
           name: c.name,
           email: c.email,
           mobile: "+61412345678",
@@ -73,7 +71,6 @@ async function main() {
           funding_types: ["private", "ndis_self_managed", "ndis_plan_managed", "medicare", ...(c.ndis ? ["ndis_agency_managed"] : [])],
           ndis_registered: c.ndis,
           capacity_new: 3,
-          calcom_intro_url: `https://cal.com/${c.email.split("@")[0]}/intro`,
           status: "agreement_signed",
           clinical_lead_approved_by: leadId,
           clinical_lead_approved_at: new Date().toISOString(),

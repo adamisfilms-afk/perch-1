@@ -101,7 +101,7 @@ export interface ClinicianRow {
   abn: string | null;
   calcom_intro_url: string | null;
   timezone: string;
-  availability_link_version: number;
+  link_version: number;
   clinical_lead_approved_at: string | null;
   clinical_lead_approved_by: string | null;
   application: Record<string, unknown>;

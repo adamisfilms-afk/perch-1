@@ -4,7 +4,7 @@ import "server-only";
 // the free times, and makes, moves or cancels the booking through the database functions.
 // Runs with the service role because nobody is signed in; it only reads what the page needs.
 
-import { availabilityPath, bookingPath, linkSecret, readLinkToken, type LinkKind } from "../booking/links";
+import { bookingPath, linkSecret, readLinkToken, type BookingLinkKind } from "../booking/links";
 import { CALL_LABELS, minutesFor, parseBookingSettings, type AppointmentKind, type BookingSettings } from "../booking/settings";
 import { availableSlots, pickHost, type HostSchedule, type Slot } from "../booking/slots";
 import { env } from "../env";
@@ -26,15 +26,11 @@ export interface BookingView {
   slots: { start: string; hostIds: string[] }[];
 }
 
-export function bookingUrl(kind: Exclude<LinkKind, "availability">, id: string): string {
+export function bookingUrl(kind: BookingLinkKind, id: string): string {
   return `${env.appUrl()}${bookingPath(linkSecret(), kind, id)}`;
 }
 
-export function availabilityUrl(clinicianId: string, version: number): string {
-  return `${env.appUrl()}${availabilityPath(linkSecret(), clinicianId, version)}`;
-}
-
-async function loadSettings(db: Db): Promise<BookingSettings> {
+export async function loadSettings(db: Db): Promise<BookingSettings> {
   const { data } = await db.from("settings").select("value").eq("key", "booking").maybeSingle();
   return parseBookingSettings(data?.value);
 }
@@ -99,7 +95,7 @@ async function teamHosts(db: Db, flag: "hosts_signup_calls" | "hosts_clinician_c
 /** Everything the booking page needs, or null if the link isn't valid. */
 export async function resolveBooking(token: string): Promise<BookingView | null> {
   const ref = readLinkToken(linkSecret(), token);
-  if (!ref || ref.kind === "availability") return null;
+  if (!ref || ref.kind === "clinician" || ref.kind === "referral") return null;
   const db = createAdminClient();
   const settings = await loadSettings(db);
   const kind = ref.kind;
@@ -131,7 +127,7 @@ export async function resolveBooking(token: string): Promise<BookingView | null>
       ? null
       : c.application_submitted_at
         ? "Your intake call has already happened."
-        : "Please submit your application in the portal first, then book your intake call.";
+        : "Please submit your application on your Perch page first, then book your intake call.";
     heading = "Book your intake call";
     intro = `Hi ${c.name.split(" ")[0]}. Choose a time for a ${minutes}-minute phone call with the Perch team about joining the network.`;
     existing = await existingBooking(db, kind, "clinician_id", c.id);
@@ -205,58 +201,3 @@ export async function cancelBooking(token: string): Promise<{ ok: true } | { ok:
 }
 
 export { CALL_LABELS };
-
-// ---------------------------------------------------------------------------
-// Clinician availability page (no login)
-// ---------------------------------------------------------------------------
-
-export interface AvailabilityView {
-  clinicianId: string;
-  firstName: string;
-  timezone: string;
-  windows: { day: number; start: string; end: string }[];
-  timeOff: { id: string; starts_on: string; ends_on: string; note: string | null }[];
-  upcoming: { id: string; startsAt: string; childName: string | null }[];
-  introMinutes: number;
-}
-
-/** The clinician a valid availability link belongs to, or null. Old links stop working when staff reset them. */
-export async function resolveAvailabilityLink(token: string): Promise<{ clinicianId: string } | null> {
-  const ref = readLinkToken(linkSecret(), token);
-  if (!ref || ref.kind !== "availability") return null;
-  const { data } = await createAdminClient().from("clinicians").select("id, status, availability_link_version").eq("id", ref.id).maybeSingle();
-  if (!data || data.status === "offboarded" || data.availability_link_version !== ref.version) return null;
-  return { clinicianId: data.id };
-}
-
-export async function loadAvailability(clinicianId: string): Promise<AvailabilityView | null> {
-  const db = createAdminClient();
-  const today = new Date().toISOString().slice(0, 10);
-  const [{ data: c }, { data: windows }, { data: off }, { data: calls }, settings] = await Promise.all([
-    db.from("clinicians").select("id, name, timezone").eq("id", clinicianId).maybeSingle(),
-    db.from("availability").select("day_of_week, start_time, end_time").eq("clinician_id", clinicianId).order("day_of_week").order("start_time"),
-    db.from("time_off").select("id, starts_on, ends_on, note").eq("clinician_id", clinicianId).gte("ends_on", today).order("starts_on"),
-    db
-      .from("appointments")
-      .select("id, starts_at, families(children(first_name))")
-      .eq("host_clinician_id", clinicianId)
-      .eq("status", "booked")
-      .gte("starts_at", new Date().toISOString())
-      .order("starts_at"),
-    loadSettings(db),
-  ]);
-  if (!c) return null;
-  return {
-    clinicianId: c.id,
-    firstName: c.name.split(" ")[0],
-    timezone: c.timezone,
-    windows: (windows ?? []).map((w: { day_of_week: number; start_time: string; end_time: string }) => ({ day: w.day_of_week, start: w.start_time.slice(0, 5), end: w.end_time.slice(0, 5) })),
-    timeOff: (off ?? []) as AvailabilityView["timeOff"],
-    upcoming: ((calls ?? []) as unknown as { id: string; starts_at: string; families: { children: { first_name: string }[] | null } | null }[]).map((a) => ({
-      id: a.id,
-      startsAt: a.starts_at,
-      childName: firstOf(firstOf(a.families)?.children)?.first_name ?? null,
-    })),
-    introMinutes: settings.intro_call_minutes,
-  };
-}

@@ -7,7 +7,8 @@ import { friendlyError, requireStaff } from "@/lib/auth";
 import { childFullName } from "@/lib/client-summary";
 import { ONBOARDING_STAGES, isOutOfDate } from "@/lib/clinician-summary";
 import type { CredentialType, FamilyStatus } from "@/lib/domain";
-import { availabilityUrl, bookingUrl } from "@/lib/server/booking";
+import { bookingUrl } from "@/lib/server/booking";
+import { clinicianUrl } from "@/lib/server/clinician-link";
 import { createClient } from "@/lib/supabase/server";
 import { todayInAustralia } from "@/lib/time";
 import { firstOf, type ClinicianRow, type CredentialRow } from "@/lib/types";
@@ -35,7 +36,7 @@ export interface ClinicianDetail {
   loadedAt: number;
   /** Weekly hours families can book intro calls in, and the clinician's private links. */
   availability: { day: number; start: string; end: string }[];
-  links: { availability: string; intakeCall: string | null };
+  links: { clinicianPage: string; intakeCall: string | null };
   applicationGaps: string[];
   goLiveGaps: string[];
   clients: { family_id: string; name: string; status: FamilyStatus }[];
@@ -128,7 +129,7 @@ export async function getClinicianDetail(id: string): Promise<{ ok: true; detail
         end: h.end_time.slice(0, 5),
       })),
       links: {
-        availability: availabilityUrl(clinician.id, clinician.availability_link_version),
+        clinicianPage: clinicianUrl(clinician.id, clinician.link_version),
         intakeCall: clinician.application_submitted_at && ["applied", "screening"].includes(clinician.status) ? bookingUrl("clinician_intake", clinician.id) : null,
       },
       applicationGaps: (applicationGaps.data as string[] | null) ?? [],

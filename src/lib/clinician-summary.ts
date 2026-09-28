@@ -6,7 +6,7 @@ import { stateFromPostcode } from "./geo";
 /**
  * The stages shown on the clinician summary, worked out from the database:
  * - New: signed up, application not submitted yet
- * - Application complete: submitted in the portal, intake call not booked
+ * - Application complete: submitted on their Perch page, intake call not booked
  * - Intake call booked: booked on their booking link (the "screening" status)
  * - Ready: live (status active) with no active clients
  * - Active: live with at least one client whose first session is confirmed

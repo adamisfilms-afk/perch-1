@@ -4,18 +4,16 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { redirect } from "next/navigation";
 import type { ActionState } from "@/components/forms";
+import { AGREEMENT_VERSION } from "@/lib/agreement";
 import { friendlyError, requireStaff } from "@/lib/auth";
 import { lookupAbn } from "@/lib/abn";
 import { CLINICIAN_STATUSES, CREDENTIAL_TYPES, PAUSE_REASONS, explainGapsError, type ClinicianStatus, type CredentialType } from "@/lib/domain";
 import { sendAgreementForSignature } from "@/lib/integrations/documenso";
 import { drainOutboxQuietly } from "@/lib/notifications/outbox";
 import { parseProfile, saveAvailability } from "@/lib/server/clinician-profile";
-import { sendPortalInvite } from "@/lib/server/portal-invite";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { ClinicianRow } from "@/lib/types";
-
-const AGREEMENT_VERSION = process.env.AGREEMENT_VERSION ?? "2026-09";
 
 const text = (fd: FormData, k: string) => {
   const v = fd.get(k);
@@ -179,14 +177,6 @@ export async function recordAgreementSigned(clinicianId: string, _prev: ActionSt
   return done(clinicianId, "Signature recorded");
 }
 
-/** Creates the clinician's portal login (or a fresh sign-in link) and emails it to them. */
-export async function invitePortal(clinicianId: string): Promise<ActionState> {
-  await requireStaff();
-  const result = await sendPortalInvite(clinicianId);
-  if (!result.ok) return { error: result.error };
-  return done(clinicianId, "Sign-in link emailed");
-}
-
 /** The intake call is done: approves the clinician and makes them ready for clients. */
 export async function completeIntake(clinicianId: string, _prev: ActionState, fd: FormData): Promise<ActionState> {
   await requireStaff(["admin", "clinical_lead"]);
@@ -219,10 +209,11 @@ export async function updateOffboarding(clinicianId: string, _prev: ActionState,
 }
 
 /** Email the clinician their availability link; with `reset`, the old link stops working first. */
-export async function sendAvailabilityLink(clinicianId: string, reset: boolean): Promise<ActionState> {
+/** Email the clinician their private link, or cancel the old one and email a new one. */
+export async function sendClinicianLink(clinicianId: string, reset: boolean): Promise<ActionState> {
   await requireStaff();
   const supabase = await createClient();
-  const { error } = await supabase.rpc("send_availability_link", { p_clinician: clinicianId, p_reset: reset });
+  const { error } = await supabase.rpc("send_clinician_link", { p_clinician: clinicianId, p_reset: reset });
   if (error) return { error: friendlyError(error) };
-  return done(clinicianId, reset ? "Old link cancelled. A new one has been emailed." : "Availability link emailed");
+  return done(clinicianId, reset ? "Old link cancelled. A new one has been emailed." : "Their link has been emailed");
 }

@@ -406,7 +406,6 @@ export function requiredCredentialTypes(profession: Profession, homeVisits: bool
 export const GO_LIVE_GAP_LABELS: Record<string, string> = {
   agreement: "Service agreement signed",
   clinical_lead_approval: "Clinical lead approval",
-  portal_account: "Portal account invited",
   age_groups: "Age groups",
   funding_types: "Funding types accepted",
   availability: "Available times for intro calls",

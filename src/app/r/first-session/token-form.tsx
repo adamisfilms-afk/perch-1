@@ -14,7 +14,7 @@ export function FirstSessionTokenForm({ token }: { token: string }) {
               <Input name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />
             </Field>
             <SubmitButton className="w-full">Yes, it&apos;s booked</SubmitButton>
-            <p className="text-xs text-stone-500">Not booked yet? No need to do anything now. You can confirm it later from your portal.</p>
+            <p className="text-xs text-stone-500">Not booked yet? No need to do anything now. You can confirm it later from the referral link in our emails.</p>
           </>
         )
       }

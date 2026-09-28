@@ -1,14 +1,25 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ActionForm, SubmitButton } from "@/components/forms";
+import { ActionForm, SubmitButton, type FormAction } from "@/components/forms";
 import { Alert, Field, Input, Select } from "@/components/ui";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
-import { createUploadUrl, recordUpload } from "../actions";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
-export function UploadForm({ types }: { types: readonly (readonly [string, string, boolean])[] }) {
+/**
+ * Upload a document straight to private storage (a one-time signed URL), then record it for checking.
+ * The actions are bound to the clinician's link on the server.
+ */
+export function DocumentUploadForm({
+  types,
+  createUploadUrl,
+  recordUpload,
+}: {
+  types: readonly (readonly [string, string, boolean])[];
+  createUploadUrl: (type: string, fileName: string) => Promise<{ path: string; token: string } | { error: string }>;
+  recordUpload: FormAction;
+}) {
   const [type, setType] = useState(types[0]?.[0] ?? "");
   const [path, setPath] = useState("");
   const [status, setStatus] = useState<{ tone: "red" | "blue" | "green"; text: string } | null>(null);

@@ -7,8 +7,8 @@ export default function Thanks() {
     <Card className="space-y-3">
       <h1 className="text-2xl font-semibold">Thanks for signing up</h1>
       <p className="text-stone-700">
-        We&apos;ve emailed you a link to set your password and open your portal. There you can complete your profile, upload your documents
-        and submit your application.
+        We&apos;ve emailed you a private link to your own Perch page (no password needed). There you can complete your profile, set your
+        available times, upload your documents and submit your application.
       </p>
       <p className="text-stone-700">Once it&apos;s submitted, we&apos;ll send you a link to book a short intake call with our team.</p>
     </Card>

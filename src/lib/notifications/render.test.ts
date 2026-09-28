@@ -17,10 +17,34 @@ describe("message rendering", () => {
     expect(tokenOf(v.intake_booking_url, "/book/")).toEqual({ kind: "signup_call", id: FAMILY, version: null });
     expect(v.recipient_first_name).toBe("Sam");
 
-    const c = buildVariables({ clinician_id: CLINICIAN, clinician_name: "Priya Shah", availability_link_version: 2, portal_token_hash: "h/1", portal_link_type: "invite" }, links);
+    const c = buildVariables({ clinician_id: CLINICIAN, clinician_name: "Priya Shah", link_version: 2 }, links);
     expect(tokenOf(c.screening_booking_url, "/book/")).toEqual({ kind: "clinician_intake", id: CLINICIAN, version: null });
-    expect(tokenOf(c.availability_url, "/availability/")).toEqual({ kind: "availability", id: CLINICIAN, version: 2 });
-    expect(c.portal_invite_url).toBe("https://switchboard.example/auth/confirm?token_hash=h%2F1&type=invite");
+    expect(tokenOf(c.clinician_url, "/clinician/")).toEqual({ kind: "clinician", id: CLINICIAN, version: 2 });
+    expect(c.documents_url).toBe(`${c.clinician_url}#documents`);
+    expect(c.portal_url).toBe(c.clinician_url);
+  });
+
+  it("gives clinicians a referral link, never the family's booking page", () => {
+    const v = buildVariables({ clinician_id: CLINICIAN, link_version: 4, match_id: FAMILY }, links);
+    expect(tokenOf(v.referral_url, "/referral/")).toEqual({ kind: "referral", id: FAMILY, version: 4 });
+    expect(v.offer_url).toBe(v.referral_url);
+    // without the clinician's link version (a family message), there's no referral link
+    expect(buildVariables({ match_id: FAMILY, family_id: FAMILY }, links).referral_url).toBeUndefined();
+  });
+
+  it("writes the referral summary and, once accepted, the family's details", () => {
+    const summary = { child_age: 5, suburb: "Newtown", service_type: "speech", funding_type: "private", concerns: ["speech_sounds"], preferred_times: [] };
+    const offer = buildVariables(summary, links);
+    expect(offer.referral_summary).toContain("Child: 5 years old");
+    expect(offer.referral_summary).toContain("Area: Newtown");
+    expect(offer.referral_summary).toContain("Preferred times: Flexible");
+    expect(offer.family_details).toBeUndefined();
+
+    const accepted = buildVariables({ ...summary, parent_name: "Sam Lee", parent_mobile: "+61412345678", parent_email: "sam@example.com", child_first_name: "Mia" }, links);
+    expect(accepted.family_details).toContain("Parent or carer: Sam Lee");
+    expect(accepted.family_details).toContain("Mobile: 0412 345 678");
+    expect(accepted.family_details).toContain("Child: Mia, 5 years old");
+    expect(accepted.family_details).not.toContain("Notes");
   });
 
   it("links booking messages back to the booking page and the host's record", () => {
@@ -31,9 +55,8 @@ describe("message rendering", () => {
   });
 
   it("adds friendly labels and one-click links", () => {
-    const v = buildVariables({ credential_type: "wwcc", match_id: "m-1", token: "abc", expires_at: "2026-11-01" }, links);
+    const v = buildVariables({ credential_type: "wwcc", token: "abc", expires_at: "2026-11-01" }, links);
     expect(v.credential_label).toBe("Working with Children Check");
-    expect(v.offer_url).toBe("https://switchboard.example/portal/offers/m-1");
     expect(v.first_session_url).toBe("https://switchboard.example/r/first-session?token=abc");
     expect(v.expires_at_local).toBe("1 Nov 2026");
   });
