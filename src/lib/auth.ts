@@ -65,8 +65,8 @@ export const getViewer = cache(async (): Promise<Viewer> => {
 
 export async function requireStaff(roles: Role[] = STAFF_ROLES): Promise<Viewer> {
   const viewer = await getViewer();
-  // Clinicians don't use logins any more (they have private links), so an old clinician login goes to /link.
-  if (!roles.includes(viewer.role)) redirect(viewer.role === "clinician" ? "/link" : "/dashboard");
+  // Clinicians sign in to their own page with an emailed code instead, so an old clinician login goes there.
+  if (!roles.includes(viewer.role)) redirect(viewer.role === "clinician" ? "/clinician" : "/dashboard");
   return viewer;
 }
 

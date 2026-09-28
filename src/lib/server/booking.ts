@@ -122,12 +122,8 @@ export async function resolveBooking(token: string): Promise<BookingView | null>
   } else if (kind === "clinician_intake") {
     const { data: c } = await db.from("clinicians").select("id, name, status, application_submitted_at").eq("id", ref.id).maybeSingle();
     if (!c) return null;
-    allowed = !!c.application_submitted_at && ["applied", "screening"].includes(c.status);
-    blockedMessage = allowed
-      ? null
-      : c.application_submitted_at
-        ? "Your intake call has already happened."
-        : "Please submit your application on your Perch page first, then book your intake call.";
+    allowed = ["applied", "screening"].includes(c.status);
+    blockedMessage = allowed ? null : "Your intake call has already happened.";
     heading = "Book your intake call";
     intro = `Hi ${c.name.split(" ")[0]}. Choose a time for a ${minutes}-minute phone call with the Perch team about joining the network.`;
     existing = await existingBooking(db, kind, "clinician_id", c.id);

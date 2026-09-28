@@ -8,12 +8,12 @@ import { AGREEMENT_VERSION, agreementUrl } from "@/lib/agreement";
 import { CREDENTIAL_TYPES, CREDENTIALS, applicationGapLabel, requiredCredentialTypes, type CredentialType } from "@/lib/domain";
 import type { ClinicianPageView } from "@/lib/server/clinician-link";
 import { daysSince, daysUntil, formatDate, formatDateTime, todayInAustralia } from "@/lib/time";
-import { addDaysOff, confirmDetails, createUploadUrl, recordUpload, removeDaysOff, saveHours, saveProfile, submitApplication } from "./actions";
+import { addDaysOff, confirmDetails, createUploadUrl, recordUpload, removeDaysOff, saveHours, saveProfile, signOut, submitApplication } from "./actions";
 
 const heading = "mb-3 text-xs font-medium uppercase tracking-wide text-neutral-400";
 
-/** What a clinician sees on their own page. No family details. */
-export function ClinicianPageBody({ view }: { view: ClinicianPageView }) {
+/** What a signed-in clinician sees on their own page. No family details. */
+export function ClinicianPageBody({ view, signedInAs }: { view: ClinicianPageView; signedInAs: string }) {
   const c = view.clinician;
   const live = c.status === "active" || c.status === "paused";
   const firstName = c.name.split(" ")[0];
@@ -23,13 +23,12 @@ export function ClinicianPageBody({ view }: { view: ClinicianPageView }) {
     <div className="space-y-10">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Hi {firstName}</h1>
-        <p className="mt-2 text-sm text-neutral-600">
-          This is your private Perch page. Keep the link to yourself: anyone with it can change your details. Lost it? Get it again at{" "}
-          <a href="/link" className="underline underline-offset-4">
-            the link page
-          </a>
-          .
-        </p>
+        <form action={signOut} className="mt-2 flex flex-wrap items-center gap-x-2 text-sm text-neutral-600">
+          <span>Signed in as {signedInAs} on this device.</span>
+          <button type="submit" className="underline underline-offset-4 hover:text-neutral-900">
+            Sign out
+          </button>
+        </form>
       </div>
 
       {c.status === "paused" && (
@@ -72,7 +71,7 @@ export function ClinicianPageBody({ view }: { view: ClinicianPageView }) {
             <div className="mt-4 space-y-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm">
               <p className="font-medium">Yearly check-in</p>
               <p>Please check your profile, capacity and documents below are still right, then confirm.</p>
-              <SimpleActionButton action={confirmDetails.bind(null, view.token)} label="Everything's up to date" />
+              <SimpleActionButton action={confirmDetails} label="Everything's up to date" />
             </div>
           )}
         </section>
@@ -81,9 +80,9 @@ export function ClinicianPageBody({ view }: { view: ClinicianPageView }) {
       <section id="hours">
         <h2 className={heading}>Your hours for intro calls</h2>
         <p className="mb-4 text-sm text-neutral-600">Families we match you with book a free {view.introMinutes}-minute phone call in these times.</p>
-        <WeeklyHoursEditor initial={view.windows} timezone={c.timezone} action={saveHours.bind(null, view.token)} />
+        <WeeklyHoursEditor initial={view.windows} timezone={c.timezone} action={saveHours} />
         <h3 className="mb-3 mt-8 text-sm font-medium text-neutral-700">Days off</h3>
-        <TimeOffEditor items={view.timeOff} addAction={addDaysOff.bind(null, view.token)} removeAction={removeDaysOff.bind(null, view.token)} />
+        <TimeOffEditor items={view.timeOff} addAction={addDaysOff} removeAction={removeDaysOff} />
         {view.upcomingIntroCalls.length > 0 && (
           <>
             <h3 className="mb-2 mt-8 text-sm font-medium text-neutral-700">Intro calls booked</h3>
@@ -102,7 +101,7 @@ export function ClinicianPageBody({ view }: { view: ClinicianPageView }) {
       <section id="profile">
         <h2 className={heading}>Your profile</h2>
         <p className="mb-4 text-sm text-neutral-600">We use this when we choose clinicians for families. Keep your capacity current.</p>
-        <ClinicianProfileForm action={saveProfile.bind(null, view.token)} clinician={c} />
+        <ClinicianProfileForm action={saveProfile} clinician={c} />
       </section>
 
       <Documents view={view} />
@@ -110,15 +109,38 @@ export function ClinicianPageBody({ view }: { view: ClinicianPageView }) {
   );
 }
 
-/** Before they go live: finish the application, then book the intake call. */
+/** Before they go live: the intake call with the team (bookable straight away) and the application. */
 function Application({ view }: { view: ClinicianPageView }) {
   const c = view.clinician;
   const url = agreementUrl();
   return (
-    <section>
-      <h2 className={heading}>Your application</h2>
-      {!c.application_submitted_at ? (
-        view.applicationGaps.length > 0 ? (
+    <>
+      {view.intakeCall && (
+        <section>
+          <h2 className={heading}>Your intake call</h2>
+          {view.intakeCall.startsAt ? (
+            <p className="text-sm">
+              Booked for <strong>{formatDateTime(view.intakeCall.startsAt)}</strong>. We&apos;ll call your mobile.{" "}
+              <a href={view.intakeCall.url} className="underline underline-offset-4">
+                Change or cancel
+              </a>
+            </p>
+          ) : (
+            <div className="space-y-3 text-sm">
+              <p className="text-neutral-600">A short phone call with our team about joining the network. You can book it now, before finishing the rest.</p>
+              <a href={view.intakeCall.url} className="inline-block rounded-md bg-neutral-950 px-4 py-2 font-medium text-white hover:bg-neutral-800">
+                Book your intake call
+              </a>
+            </div>
+          )}
+        </section>
+      )}
+
+      <section>
+        <h2 className={heading}>Your application</h2>
+        {c.application_submitted_at ? (
+          <p className="text-sm text-neutral-700">Submitted {formatDate(c.application_submitted_at)}. Thanks! We&apos;ll check your documents before we make you live.</p>
+        ) : view.applicationGaps.length > 0 ? (
           <div className="space-y-2 text-sm">
             <p className="text-neutral-600">Before you can submit, please:</p>
             <ul className="list-disc space-y-1 pl-5">
@@ -132,7 +154,7 @@ function Application({ view }: { view: ClinicianPageView }) {
             </ul>
           </div>
         ) : (
-          <ActionForm action={submitApplication.bind(null, view.token)}>
+          <ActionForm action={submitApplication}>
             <p className="text-sm text-neutral-600">Your profile, hours and documents are in. Accept the service agreement to submit your application.</p>
             <Checkbox name="agree">
               I have read and accept the{" "}
@@ -147,26 +169,9 @@ function Application({ view }: { view: ClinicianPageView }) {
             </Checkbox>
             <SubmitButton pendingText="Submitting…">Submit application</SubmitButton>
           </ActionForm>
-        )
-      ) : view.intakeCall?.startsAt ? (
-        <p className="text-sm">
-          Thanks for applying. Your intake call is booked for <strong>{formatDateTime(view.intakeCall.startsAt)}</strong>. We&apos;ll check your documents
-          before the call.{" "}
-          <a href={view.intakeCall.url} className="underline underline-offset-4">
-            Change or cancel
-          </a>
-        </p>
-      ) : (
-        <div className="space-y-3 text-sm">
-          <p className="text-neutral-600">Thanks for submitting your application. The next step is a short intake call with our team.</p>
-          {view.intakeCall && (
-            <a href={view.intakeCall.url} className="inline-block rounded-md bg-neutral-950 px-4 py-2 font-medium text-white hover:bg-neutral-800">
-              Book your intake call
-            </a>
-          )}
-        </div>
-      )}
-    </section>
+        )}
+      </section>
+    </>
   );
 }
 
@@ -207,8 +212,8 @@ function Documents({ view }: { view: ClinicianPageView }) {
       <h3 className="mb-3 text-sm font-medium text-neutral-700">Upload a document</h3>
       <DocumentUploadForm
         types={uploadable.map((t) => [t, CREDENTIALS[t].label, CREDENTIALS[t].expiryTracked] as const)}
-        createUploadUrl={createUploadUrl.bind(null, view.token)}
-        recordUpload={recordUpload.bind(null, view.token)}
+        createUploadUrl={createUploadUrl}
+        recordUpload={recordUpload}
       />
     </section>
   );

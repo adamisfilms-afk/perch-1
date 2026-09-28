@@ -271,6 +271,53 @@ d("database", () => {
       expect(await sent()).toHaveLength(2);
     });
 
+    it("signs a clinician in with an emailed code, once, and ends sessions on sign-out or reset", async () => {
+      const { clinicianId } = await db.createActiveClinician();
+      const [{ email }] = await db.q<{ email: string }>(POSTGRES, "select email from public.clinicians where id = $1", [clinicianId]);
+      const lastCode = async () =>
+        (await db.one<{ code: string }>(POSTGRES, "select payload->>'code' as code from public.message_log where template = 'clinician_login_code' and recipient_id = $1 order by created_at desc limit 1", [clinicianId])).code;
+      const verify = (code: string) => db.one<{ token: string | null }>(SERVICE, "select public.verify_clinician_code($1, $2) as token", [email, code]);
+      const session = async (token: string) => (await db.one<{ id: string | null }>(SERVICE, "select public.clinician_session($1) as id", [token])).id;
+
+      await db.q(SERVICE, "select public.request_clinician_code($1)", [email.toUpperCase()]);
+      const code = await lastCode();
+      expect(code).toMatch(/^\d{6}$/);
+      const wrong = code === "000000" ? "111111" : "000000";
+      expect((await verify(wrong)).token).toBeNull(); // wrong code: counted, not an error
+      const { token } = await verify(code);
+      expect(token).toMatch(/^[0-9a-f]{64}$/);
+      expect(await session(token!)).toBe(clinicianId);
+      await expect(verify(code)).rejects.toThrow(/expired/); // works once
+
+      // five wrong tries use a code up
+      await db.q(SERVICE, "select public.request_clinician_code($1)", [email]);
+      const second = await lastCode();
+      const bad = second === "000000" ? "111111" : "000000";
+      for (let i = 0; i < 5; i++) expect((await verify(bad)).token).toBeNull();
+      await expect(verify(second)).rejects.toThrow(/expired/);
+
+      // unknown emails get nothing (and the reply doesn't say so)
+      await db.q(SERVICE, "select public.request_clinician_code('nobody@example.com')");
+      await expect(db.one(SERVICE, "select public.verify_clinician_code('nobody@example.com', '123456')")).rejects.toThrow(/expired/);
+
+      // signing out, and staff resetting their link, end sessions
+      await db.q(SERVICE, "select public.end_clinician_session($1)", [token]);
+      expect(await session(token!)).toBeNull();
+      await db.q(SERVICE, "select public.request_clinician_code($1)", [email]);
+      const { token: another } = await verify(await lastCode());
+      await db.q(user(coordinator), "select public.send_clinician_link($1, true)", [clinicianId]);
+      expect(await session(another!)).toBeNull();
+
+      // at most 5 codes an hour
+      for (let i = 0; i < 5; i++) await db.q(SERVICE, "select public.request_clinician_code($1)", [email]);
+      const [{ n }] = await db.q<{ n: number }>(POSTGRES, "select count(*)::int as n from public.clinician_login_codes where clinician_id = $1", [clinicianId]);
+      expect(n).toBe(5);
+
+      // nobody else can read or call any of it
+      await expect(db.q(user(coordinator), "select * from public.clinician_sessions")).rejects.toThrow(/permission denied/);
+      await expect(db.q(ANON, "select public.clinician_session('x')")).rejects.toThrow(/permission denied/);
+    });
+
     it("records the intro call and first session from the referral link", async () => {
       const a = await db.createActiveClinician();
       const { familyId } = await db.createReadyFamily();
@@ -430,12 +477,15 @@ d("database", () => {
       const { id: applicant } = await db.one<{ id: string }>(SERVICE, "select public.submit_application($1) as id", [
         JSON.stringify({ name: "Nat Applicant", email: "nat.applicant@example.com", mobile: "+61400111444", profession: "speech_pathologist", experience_years: 2, suburb: "Carlton", postcode: "3053" }),
       ]);
-      await expect(book("clinician_intake", applicant, at(7, 1), lead)).rejects.toThrow(/can no longer be booked/); // not submitted yet
-      await db.q(POSTGRES, "update public.clinicians set application_submitted_at = now() where id = $1", [applicant]);
+      // straight after signing up, before the application is submitted
       const [{ id: intakeId }] = await book("clinician_intake", applicant, at(7, 1), lead);
       expect((await db.one<{ status: string }>(POSTGRES, "select status from public.clinicians where id = $1", [applicant])).status).toBe("screening");
       await db.q(SERVICE, "select public.cancel_appointment($1)", [intakeId]);
       expect((await db.one<{ status: string }>(POSTGRES, "select status from public.clinicians where id = $1", [applicant])).status).toBe("applied");
+      // not once they've gone live
+      await db.q(POSTGRES, "update public.clinicians set status = 'active' where id = $1", [applicant]).catch(() => undefined);
+      await db.q(POSTGRES, "update public.clinicians set status = 'offboarded' where id = $1", [applicant]);
+      await expect(book("clinician_intake", applicant, at(8, 1), lead)).rejects.toThrow(/can no longer be booked/);
     });
   });
 
