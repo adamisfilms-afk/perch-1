@@ -119,6 +119,7 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
 
   const inIntake = ["new", "contacted", "intake_booked", "intake_done"].includes(family.status);
   const accepted = matches.find((m) => m.state === "accepted");
+  const offered = matches.find((m) => m.state === "offered");
   const manualOptions = MANUAL_FAMILY_STATUSES.filter((s) => FAMILY_TRANSITIONS[family.status].includes(s) || viewer.role === "admin").filter(
     (s) => s !== family.status,
   );
@@ -154,6 +155,7 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
               <AllocateClinician
                 familyId={family.id}
                 current={accepted ? { id: accepted.clinician_id, name: accepted.clinicians?.name ?? "Clinician" } : null}
+                pending={offered ? { id: offered.clinician_id, name: offered.clinicians?.name ?? "Clinician", expiresAt: offered.offer_expires_at } : null}
                 blockedReason={allocationBlockedReason(family.status)}
               />
               {family.status === "ready_to_match" && (

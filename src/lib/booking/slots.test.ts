@@ -63,8 +63,12 @@ describe("signed links", () => {
     expect(readLinkToken("secret", t)).toEqual({ kind: "signup_call", id, version: null });
     expect(readLinkToken("other-secret", t)).toBeNull();
     expect(readLinkToken("secret", t.replace("s.", "i."))).toBeNull();
-    const a = makeLinkToken("secret", "availability", id, 3);
-    expect(readLinkToken("secret", a)).toEqual({ kind: "availability", id, version: 3 });
+    const a = makeLinkToken("secret", "clinician", id, 3);
+    expect(readLinkToken("secret", a)).toEqual({ kind: "clinician", id, version: 3 });
     expect(readLinkToken("secret", a.replace(".3.", ".4."))).toBeNull();
+    const r = makeLinkToken("secret", "referral", id, 2);
+    expect(readLinkToken("secret", r)).toEqual({ kind: "referral", id, version: 2 });
+    // a referral link can't be turned into a clinician-page link
+    expect(readLinkToken("secret", r.replace("r.", "a."))).toBeNull();
   });
 });

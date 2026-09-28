@@ -3,7 +3,7 @@
 import { ActionForm, SubmitButton, type FormAction } from "./forms";
 import { CheckboxGroup, Field, Input } from "./ui";
 
-// Intro call outcome and first-session confirmation: used by clinicians in the portal
+// Intro call outcome and first-session confirmation: used by clinicians on their referral page
 // and by staff recording on a clinician's behalf.
 
 export function IntroOutcomeForm({ action }: { action: FormAction }) {

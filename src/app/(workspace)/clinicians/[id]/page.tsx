@@ -139,7 +139,7 @@ export default async function ClinicianPage({ params, searchParams }: PageProps<
                     submitted <When at={clinician.application_submitted_at} />
                   </>
                 ) : (
-                  "not submitted yet (they finish it in the portal)"
+                  "not submitted yet (they finish it on their Perch page)"
                 )}
                 {typeof clinician.application.screening_at === "string" && (
                   <>
@@ -159,16 +159,11 @@ export default async function ClinicianPage({ params, searchParams }: PageProps<
                   ))}
                 </ul>
               )}
-              <div className="mt-4 flex flex-wrap gap-2">
-                {!clinician.clinical_lead_approved_at && ["admin", "clinical_lead"].includes(viewer.role) && (
+              {!clinician.clinical_lead_approved_at && ["admin", "clinical_lead"].includes(viewer.role) && (
+                <div className="mt-4 flex flex-wrap gap-2">
                   <SimpleActionButton action={actions.approveGoLive.bind(null, id)} label="Approve as clinical lead" variant="secondary" />
-                )}
-                <SimpleActionButton
-                  action={actions.invitePortal.bind(null, id)}
-                  label={clinician.user_id ? "Resend portal sign-in link" : "Invite to the portal"}
-                  variant="secondary"
-                />
-              </div>
+                </div>
+              )}
               {clinician.application_submitted_at && clinician.status !== "paused" && (
                 <div className="mt-4 border-t border-stone-100 pt-4">
                   {["admin", "clinical_lead"].includes(viewer.role) ? (
@@ -188,14 +183,15 @@ export default async function ClinicianPage({ params, searchParams }: PageProps<
 
           {clinician.status !== "offboarded" && (
             <Card>
-              <CardTitle>Availability link</CardTitle>
+              <CardTitle>Their private link</CardTitle>
               <p className="mb-3 text-sm text-stone-600">
-                Their private page (no login) for the times families can book intro calls, and days off. It&apos;s in their welcome email.
+                Clinicians don&apos;t log in. Their private page (in every email we send them) is where they update their profile, intro-call hours, days
+                off and documents, and submit their application. They can also get it again at /link.
               </p>
               <div className="flex flex-wrap gap-2">
-                <SimpleActionButton action={actions.sendAvailabilityLink.bind(null, id, false)} label="Email it to them" variant="secondary" />
+                <SimpleActionButton action={actions.sendClinicianLink.bind(null, id, false)} label="Email it to them" variant="secondary" />
                 <SimpleActionButton
-                  action={actions.sendAvailabilityLink.bind(null, id, true)}
+                  action={actions.sendClinicianLink.bind(null, id, true)}
                   label="Reset and email a new link"
                   variant="secondary"
                   confirm="Cancel their current link and email a new one?"

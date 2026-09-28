@@ -25,6 +25,7 @@ export interface ClientDetail {
     rank: number;
     distance_km: number | null;
     offered_at: string | null;
+    offer_expires_at: string | null;
     responded_at: string | null;
     response_reason: string | null;
     intro_at: string | null;
@@ -55,7 +56,7 @@ export async function getClientDetail(id: string): Promise<{ ok: true; detail: C
     supabase.from("intake_calls").select("id, scheduled_at, completed_at, outcome, outcome_reason, notes").eq("family_id", id).order("created_at", { ascending: false }),
     supabase
       .from("matches")
-      .select("id, clinician_id, state, rank, distance_km, offered_at, responded_at, response_reason, clinicians(name), intro_calls(id, scheduled_at, outcome, reason), conversions(first_session_at)")
+      .select("id, clinician_id, state, rank, distance_km, offered_at, offer_expires_at, responded_at, response_reason, clinicians(name), intro_calls(id, scheduled_at, outcome, reason), conversions(first_session_at)")
       .eq("family_id", id)
       .not("offered_at", "is", null)
       .order("offered_at", { ascending: false }),
@@ -71,6 +72,7 @@ export async function getClientDetail(id: string): Promise<{ ok: true; detail: C
     rank: number;
     distance_km: number | null;
     offered_at: string | null;
+    offer_expires_at: string | null;
     responded_at: string | null;
     response_reason: string | null;
     clinicians: { name: string } | { name: string }[] | null;
@@ -120,6 +122,7 @@ export async function getClientDetail(id: string): Promise<{ ok: true; detail: C
           rank: m.rank,
           distance_km: m.distance_km,
           offered_at: m.offered_at,
+          offer_expires_at: m.offer_expires_at,
           responded_at: m.responded_at,
           response_reason: m.response_reason,
           intro_at: intro?.scheduled_at ?? null,

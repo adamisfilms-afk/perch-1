@@ -61,12 +61,11 @@ export function ClinicianInfo({
               ["Signed up", formatDateTime(c.created_at)],
               ["Application", c.application_submitted_at ? `Submitted ${formatDateTime(c.application_submitted_at)}` : "Not submitted yet"],
               ["Intake call", screeningAt ? `Booked for ${formatDateTime(screeningAt)}` : c.application_submitted_at ? "Not booked yet" : null],
-              ["Portal", c.user_id ? "Invited" : "Not invited"],
             ]}
           />
           {!c.application_submitted_at && applicationGaps.length > 0 && (
             <div className="mt-4 text-sm">
-              <p className="text-neutral-500">Still to do in the portal</p>
+              <p className="text-neutral-500">Still to do on their Perch page</p>
               <ul className="mt-1 list-disc pl-5 text-neutral-900">
                 {applicationGaps.map((g) => (
                   <li key={g}>{applicationGapLabel(g)}</li>
@@ -141,7 +140,7 @@ export function ClinicianInfo({
           ]}
         />
         <div className="mt-3">
-          <CopyLink label="Their availability page (no login)" url={detail.links.availability} />
+          <CopyLink label="Their private Perch page (no login)" url={detail.links.clinicianPage} />
         </div>
       </Section>
 

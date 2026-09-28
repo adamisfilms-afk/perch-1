@@ -19,7 +19,7 @@ export default async function FirstSessionLink({ searchParams }: PageProps<"/r/f
         {valid ? (
           <FirstSessionTokenForm token={t} />
         ) : (
-          <p className="text-sm text-stone-700">This link has expired or has already been used. You can update it any time from your portal.</p>
+          <p className="text-sm text-stone-700">This link has expired or has already been used. You can still confirm it from the referral link in our emails.</p>
         )}
       </Card>
     </main>

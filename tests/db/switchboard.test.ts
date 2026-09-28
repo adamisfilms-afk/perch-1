@@ -39,6 +39,11 @@ d("database", () => {
         "select public.record_booking('intake', null, 'x@example.com', now(), 'u')",
         "select public.peek_action_token('x')",
         "select public.check_rate_limit('k', 1, 60)",
+        "select public.respond_to_referral(gen_random_uuid(), true)",
+        "select public.submit_clinician_application(gen_random_uuid(), 'v1')",
+        "select public.record_clinician_upload(gen_random_uuid(), 'wwcc', null, null, 'x/y.pdf')",
+        "select public.request_clinician_link('x@example.com')",
+        "select public.confirm_clinician_details(gen_random_uuid())",
       ]) {
         await expect(db.q(user(userId), call)).rejects.toThrow(/permission denied/);
         await expect(db.q(user(coordinator), call)).rejects.toThrow(/permission denied/);
@@ -235,29 +240,70 @@ d("database", () => {
     });
   });
 
+  describe("clinician links", () => {
+    it("records uploads from their link into the verification queue", async () => {
+      const { clinicianId } = await db.createActiveClinician();
+      const upload = (type: string, expires: string | null, path = `${clinicianId}/${randomUUID()}.pdf`) =>
+        db.q(SERVICE, "select public.record_clinician_upload($1, $2, '123', $3, $4)", [clinicianId, type, expires, path]);
+      await upload("wwcc", "2031-01-01");
+      const [row] = await db.q<{ status: string }>(POSTGRES, "select status from public.credentials where clinician_id = $1 and type = 'wwcc' order by created_at desc limit 1", [clinicianId]);
+      expect(row.status).toBe("pending");
+      await expect(upload("drivers_licence", "2031-01-01")).rejects.toThrow(/sight it/);
+      await expect(upload("wwcc", null)).rejects.toThrow(/expiry date/);
+      await expect(upload("wwcc", "2031-01-01", `${randomUUID()}/someone-else.pdf`)).rejects.toThrow(/Upload the file first/);
+    });
+
+    it("emails a clinician their link on request, and resetting it changes the version", async () => {
+      const { clinicianId } = await db.createActiveClinician();
+      const [{ email }] = await db.q<{ email: string }>(POSTGRES, "select email from public.clinicians where id = $1", [clinicianId]);
+      const sent = () =>
+        db.q<{ payload: { link_version: number } }>(POSTGRES, "select payload from public.message_log where template = 'clinician_link' and recipient_id = $1 order by created_at", [clinicianId]);
+
+      await db.q(SERVICE, "select public.request_clinician_link($1)", [email.toUpperCase()]);
+      await db.q(SERVICE, "select public.request_clinician_link('nobody@example.com')"); // says nothing, sends nothing
+      expect((await sent()).map((m) => m.payload.link_version)).toEqual([1]);
+
+      await db.q(user(coordinator), "select public.send_clinician_link($1, true)", [clinicianId]);
+      expect((await sent()).map((m) => m.payload.link_version)).toEqual([1, 2]);
+
+      await db.q(user(coordinator), "select public.set_clinician_status($1, 'offboarded', null, 'Left')", [clinicianId]);
+      await db.q(SERVICE, "select public.request_clinician_link($1)", [email]);
+      expect(await sent()).toHaveLength(2);
+    });
+
+    it("records the intro call and first session from the referral link", async () => {
+      const a = await db.createActiveClinician();
+      const { familyId } = await db.createReadyFamily();
+      const [{ match }] = await db.q<{ match: string }>(user(coordinator), "select public.allocate_clinician($1, $2) as match", [familyId, a.clinicianId]);
+      await db.q(SERVICE, "select public.respond_to_referral($1, true)", [match]);
+      await db.q(SERVICE, "select public.record_intro_outcome($1, 'going_ahead')", [match]);
+      expect(await db.familyStatus(familyId)).toBe("intro_done");
+      await db.q(SERVICE, "select public.confirm_first_session($1, current_date)", [match]);
+      expect(await db.familyStatus(familyId)).toBe("converted");
+      await expect(db.q(ANON, "select public.record_intro_outcome($1, 'going_ahead')", [match])).rejects.toThrow(/permission denied/);
+    });
+  });
+
   describe("clinician sign-up", () => {
     it("goes from sign-up to application, intake call and ready", async () => {
       const { id } = await db.one<{ id: string }>(SERVICE, "select public.submit_application($1) as id", [
         JSON.stringify({ name: "Olivia Hart", email: "olivia.hart@example.com", mobile: "+61400111333", profession: "occupational_therapist", experience_years: 4, suburb: "Carlton", postcode: "3053" }),
       ]);
 
-      // The app creates the login; the database links it and queues the welcome email with the sign-in link.
-      const userId = randomUUID();
-      await db.q(POSTGRES, "insert into auth.users (id, email) values ($1, 'olivia.hart@example.com')", [userId]);
-      await db.q(SERVICE, "select public.link_clinician_portal($1, $2, 'hash-1', 'invite')", [id, userId]);
-      const welcome = await db.q<{ payload: { portal_token_hash: string } }>(POSTGRES, "select payload from public.message_log where template = 'clinician_welcome' and recipient_id = $1", [id]);
-      expect(welcome.map((m) => m.payload.portal_token_hash)).toEqual(["hash-1"]);
-      await expect(db.q(user(coordinator), "select public.link_clinician_portal($1, $2, 'x', 'invite')", [id, userId])).rejects.toThrow(/permission denied/);
+      // No login: the welcome email carries the version of their private link.
+      const welcome = await db.q<{ payload: { link_version: number } }>(POSTGRES, "select payload from public.message_log where template = 'clinician_welcome' and recipient_id = $1", [id]);
+      expect(welcome.map((m) => m.payload.link_version)).toEqual([1]);
 
-      // Can't submit until the profile and documents are in.
-      await expect(db.q(user(userId), "select public.submit_my_application('2026-09')")).rejects.toThrow(/isn't complete yet/);
-      await expect(db.q(user(userId), "update public.clinicians set application_submitted_at = now() where id = $1", [id])).rejects.toThrow(/ask the team/);
-      await db.q(POSTGRES, "update public.clinicians set calcom_intro_url = 'https://cal.com/olivia/intro', age_groups = '{3-5}', funding_types = '{private}' where id = $1", [id]);
+      // Their page (the app, with the service role) submits; nobody else can. Not until the profile and documents are in.
+      await expect(db.q(user(coordinator), "select public.submit_clinician_application($1, '2026-09')", [id])).rejects.toThrow(/permission denied/);
+      await expect(db.q(ANON, "select public.submit_clinician_application($1, '2026-09')", [id])).rejects.toThrow(/permission denied/);
+      await expect(db.q(SERVICE, "select public.submit_clinician_application($1, '2026-09')", [id])).rejects.toThrow(/isn't complete yet/);
+      await db.q(POSTGRES, "update public.clinicians set age_groups = '{3-5}', funding_types = '{private}' where id = $1", [id]);
       await db.q(POSTGRES, "insert into public.availability (clinician_id, day_of_week, start_time, end_time) values ($1, 2, '15:00', '18:00')", [id]);
       for (const t of ["ahpra", "wwcc", "ndis_worker_screening", "ndis_orientation", "pi_insurance", "pl_insurance", "abn", "cv"]) {
         await db.q(POSTGRES, "insert into public.credentials (clinician_id, type, status, expires_at) values ($1, $2, 'pending', '2030-01-01')", [id, t]);
       }
-      await db.q(user(userId), "select public.submit_my_application('2026-09')");
+      await db.q(SERVICE, "select public.submit_clinician_application($1, '2026-09')", [id]);
       const [c] = await db.q<{ application_submitted_at: string | null; signed: boolean }>(
         POSTGRES,
         "select application_submitted_at, exists (select 1 from public.agreements a where a.clinician_id = c.id and a.signed_at is not null) as signed from public.clinicians c where id = $1",
@@ -267,7 +313,7 @@ d("database", () => {
       expect(c.signed).toBe(true);
       expect(await db.q(POSTGRES, "select 1 from public.message_log where template = 'application_submitted' and recipient_id = $1", [id])).toHaveLength(1);
 
-      // Booking the intake call through Cal.com.
+      // Booking the intake call.
       await db.q(SERVICE, "select public.record_booking('screening', $1, null, now() + interval '2 days', 'screen-1')", [id]);
       expect((await db.one<{ status: string }>(POSTGRES, "select status from public.clinicians where id = $1", [id])).status).toBe("screening");
 
@@ -301,8 +347,9 @@ d("database", () => {
       await db.q(POSTGRES, "update public.clinicians set status = 'documents_verified' where id = $1", [id]).catch(() => undefined);
       const gaps = await db.one<{ gaps: string[] }>(user(coordinator), "select public.clinician_go_live_gaps($1) as gaps", [id]);
       expect(gaps.gaps).toEqual(
-        expect.arrayContaining(["credential:ahpra", "credential:wwcc", "agreement", "clinical_lead_approval", "availability", "portal_account"]),
+        expect.arrayContaining(["credential:ahpra", "credential:wwcc", "agreement", "clinical_lead_approval", "availability"]),
       );
+      expect(gaps.gaps).not.toContain("portal_account");
       expect(gaps.gaps).not.toContain("credential:spa_cpsp");
     });
 
@@ -373,6 +420,8 @@ d("database", () => {
       const a = await db.createActiveClinician({ name: "Intro Host" });
       const { familyId } = await db.createReadyFamily();
       const [{ match }] = await db.q<{ match: string }>(user(coordinator), "select public.allocate_clinician($1, $2) as match", [familyId, a.clinicianId]);
+      await expect(book("intro_call", match, at(6, 5), null)).rejects.toThrow(/can no longer be booked/); // not accepted yet
+      await db.q(SERVICE, "select public.respond_to_referral($1, true)", [match]);
       const [{ id: introId }] = await book("intro_call", match, at(6, 5), null);
       expect(await db.familyStatus(familyId)).toBe("intro_booked");
       await db.q(SERVICE, "select public.cancel_appointment($1)", [introId]);
@@ -391,39 +440,88 @@ d("database", () => {
   });
 
   describe("clinician allocation", () => {
-    it("allocates a clinician directly and emails the family and the clinician", async () => {
+    const templates = (ids: string[]) =>
+      db.q<{ template: string; channel: string; payload: Record<string, unknown> }>(
+        POSTGRES,
+        "select template, channel, payload from public.message_log where recipient_id = any($1) order by created_at",
+        [ids],
+      );
+
+    it("offers the client to the chosen clinician, who accepts from the link", async () => {
       const a = await db.createActiveClinician({ name: "Ava Allocated", capacity: 2 });
       const { familyId, childId } = await db.createReadyFamily();
-      await db.q(user(coordinator), "select public.allocate_clinician($1, $2)", [familyId, a.clinicianId]);
+      const [{ match }] = await db.q<{ match: string }>(user(coordinator), "select public.allocate_clinician($1, $2) as match", [familyId, a.clinicianId]);
+
+      // Offered, with a de-identified summary by email and text. Nothing is taken from capacity yet.
+      expect(await db.matchStates(childId)).toEqual({ [a.clinicianId]: "offered" });
+      expect(await db.familyStatus(familyId)).toBe("offered");
+      const offer = (await templates([a.clinicianId])).filter((m) => m.template === "offer_sent");
+      expect(offer.map((m) => m.channel).sort()).toEqual(["email", "sms"]);
+      expect(offer[0].payload).toMatchObject({ match_id: match, suburb: "Parramatta", child_age: 5, link_version: 1 });
+      expect(offer[0].payload).not.toHaveProperty("parent_name");
+      expect(offer[0].payload).not.toHaveProperty("parent_mobile");
+      expect((await db.one<{ capacity_new: number }>(POSTGRES, "select capacity_new from public.clinicians where id = $1", [a.clinicianId])).capacity_new).toBe(2);
+
+      // Only the app (checking the signed link) can answer for them.
+      await expect(db.q(user(coordinator), "select public.respond_to_referral($1, true)", [match])).rejects.toThrow(/permission denied/);
+      await expect(db.q(ANON, "select public.respond_to_referral($1, true)", [match])).rejects.toThrow(/permission denied/);
+      await db.q(SERVICE, "select public.respond_to_referral($1, true)", [match]);
 
       expect(await db.matchStates(childId)).toEqual({ [a.clinicianId]: "accepted" });
       expect(await db.familyStatus(familyId)).toBe("accepted");
-      const [c] = await db.q<{ capacity_new: number }>(POSTGRES, "select capacity_new from public.clinicians where id = $1", [a.clinicianId]);
-      expect(c.capacity_new).toBe(1);
-      const sent = await db.q<{ template: string }>(
-        POSTGRES,
-        "select distinct template from public.message_log where template in ('match_confirmed', 'clinician_allocated') and (recipient_id = $1 or recipient_id = $2) order by template",
-        [familyId, a.clinicianId],
-      );
-      expect(sent.map((m) => m.template)).toEqual(["clinician_allocated", "match_confirmed"]);
-      // the clinician can now see the family
-      expect(await db.q(user(a.userId), "select id from public.families where id = $1", [familyId])).toHaveLength(1);
+      expect((await db.one<{ capacity_new: number }>(POSTGRES, "select capacity_new from public.clinicians where id = $1", [a.clinicianId])).capacity_new).toBe(1);
+      const after = await templates([a.clinicianId, familyId]);
+      expect(after.map((m) => m.template)).toEqual(expect.arrayContaining(["match_confirmed", "clinician_allocated"]));
+      // the clinician is emailed the family's details once they accept
+      expect(after.find((m) => m.template === "clinician_allocated")?.payload).toMatchObject({
+        match_id: match,
+        parent_name: "Sam Parent",
+        parent_mobile: "+61412000111",
+        child_first_name: "Alex",
+      });
+      await expect(db.q(SERVICE, "select public.respond_to_referral($1, false)", [match])).rejects.toThrow(/no longer open/);
     });
 
-    it("changes the clinician, returning the place and telling the first clinician", async () => {
+    it("sends the client back to Ready to match when the clinician declines or doesn't reply", async () => {
+      const a = await db.createActiveClinician({ name: "Declining Dana" });
+      const b = await db.createActiveClinician({ name: "Silent Sid" });
+      const { familyId, childId } = await db.createReadyFamily();
+      const [{ match }] = await db.q<{ match: string }>(user(coordinator), "select public.allocate_clinician($1, $2) as match", [familyId, a.clinicianId]);
+      await db.q(SERVICE, "select public.respond_to_referral($1, false, 'Full this term')", [match]);
+      expect(await db.matchStates(childId)).toEqual({ [a.clinicianId]: "declined" });
+      expect(await db.familyStatus(familyId)).toBe("ready_to_match");
+      const declined = await db.q<{ payload: { reason: string } }>(POSTGRES, "select payload from public.message_log where template = 'offer_declined' and payload->>'family_id' = $1", [familyId]);
+      expect(declined.map((m) => m.payload.reason)).toEqual(["Full this term", "Full this term"]); // email and Slack
+
+      await db.q(user(coordinator), "select public.allocate_clinician($1, $2)", [familyId, b.clinicianId]);
+      await db.q(POSTGRES, "update public.matches set offer_expires_at = now() - interval '1 minute' where child_id = $1 and state = 'offered'", [childId]);
+      await db.q(SERVICE, "select public.run_scheduled_jobs('offers')");
+      expect(await db.matchStates(childId)).toEqual({ [a.clinicianId]: "declined", [b.clinicianId]: "timeout" });
+      expect(await db.familyStatus(familyId)).toBe("ready_to_match");
+      expect(await db.q(POSTGRES, "select 1 from public.message_log where template = 'offer_expired' and payload->>'family_id' = $1", [familyId])).toHaveLength(2);
+    });
+
+    it("changes the clinician, returning the place, cancelling their intro call and telling them", async () => {
       const a = await db.createActiveClinician({ name: "First Pick", capacity: 2 });
       const b = await db.createActiveClinician({ name: "Second Pick", capacity: 2 });
       const { familyId, childId } = await db.createReadyFamily();
-      await db.q(user(coordinator), "select public.allocate_clinician($1, $2)", [familyId, a.clinicianId]);
-      await db.q(user(coordinator), "select public.allocate_clinician($1, $2)", [familyId, b.clinicianId]);
+      const [{ match }] = await db.q<{ match: string }>(user(coordinator), "select public.allocate_clinician($1, $2) as match", [familyId, a.clinicianId]);
+      await db.q(SERVICE, "select public.respond_to_referral($1, true)", [match]);
+      const [{ id: intro }] = await db.q<{ id: string }>(SERVICE, "select public.book_appointment('intro_call', $1, now() + interval '3 days', 15) as id", [match]);
+      expect(await db.familyStatus(familyId)).toBe("intro_booked");
 
-      expect(await db.matchStates(childId)).toEqual({ [a.clinicianId]: "withdrawn", [b.clinicianId]: "accepted" });
-      expect(await db.familyStatus(familyId)).toBe("accepted");
+      await db.q(user(coordinator), "select public.allocate_clinician($1, $2)", [familyId, b.clinicianId]);
+      expect(await db.matchStates(childId)).toEqual({ [a.clinicianId]: "withdrawn", [b.clinicianId]: "offered" });
+      expect(await db.familyStatus(familyId)).toBe("offered");
       const caps = await db.q<{ id: string; capacity_new: number }>(POSTGRES, "select id, capacity_new from public.clinicians where id = any($1)", [[a.clinicianId, b.clinicianId]]);
-      expect(Object.fromEntries(caps.map((c) => [c.id, c.capacity_new]))).toEqual({ [a.clinicianId]: 2, [b.clinicianId]: 1 });
-      const removed = await db.q(POSTGRES, "select 1 from public.message_log where template = 'allocation_removed' and recipient_id = $1", [a.clinicianId]);
-      expect(removed).toHaveLength(1);
-      await expect(db.q(user(coordinator), "select public.allocate_clinician($1, $2)", [familyId, b.clinicianId])).rejects.toThrow(/already allocated/);
+      expect(Object.fromEntries(caps.map((c) => [c.id, c.capacity_new]))).toEqual({ [a.clinicianId]: 2, [b.clinicianId]: 2 });
+      expect((await db.one<{ status: string }>(POSTGRES, "select status from public.appointments where id = $1", [intro])).status).toBe("cancelled");
+      expect(await db.q(POSTGRES, "select 1 from public.message_log where template = 'allocation_removed' and recipient_id = $1", [a.clinicianId])).toHaveLength(1);
+      await expect(db.q(user(coordinator), "select public.allocate_clinician($1, $2)", [familyId, b.clinicianId])).rejects.toThrow(/already been offered/);
+
+      // Changing again before B answers withdraws B's offer.
+      await db.q(user(coordinator), "select public.allocate_clinician($1, $2)", [familyId, a.clinicianId]);
+      expect(await db.q(POSTGRES, "select 1 from public.message_log where template = 'offer_withdrawn' and recipient_id = $1", [b.clinicianId])).toHaveLength(1);
     });
 
     it("won't allocate before the sign-up call, to an inactive clinician, or by a clinician", async () => {
@@ -442,7 +540,7 @@ d("database", () => {
       const { familyId } = await db.createReadyFamily({ complex: true });
       await expect(db.q(user(coordinator), "select public.allocate_clinician($1, $2)", [familyId, a.clinicianId])).rejects.toThrow(/clinical lead/);
       await db.q(user(lead), "select public.allocate_clinician($1, $2)", [familyId, a.clinicianId]);
-      expect(await db.familyStatus(familyId)).toBe("accepted");
+      expect(await db.familyStatus(familyId)).toBe("offered");
     });
   });
 
@@ -469,7 +567,7 @@ d("database", () => {
       const [offerC] = await db.q<{ match_id: string }>(user(c.userId), "select match_id from public.get_my_offers()");
       await db.q(user(c.userId), "select public.respond_to_offer($1, false)", [offerC.match_id]);
       expect(await db.familyStatus(familyId)).toBe("ready_to_match");
-      const alert = await db.q(POSTGRES, "select 1 from public.message_log where template = 'shortlist_exhausted' and payload->>'family_id' = $1", [familyId]);
+      const alert = await db.q(POSTGRES, "select 1 from public.message_log where template = 'offer_declined' and payload->>'family_id' = $1", [familyId]);
       expect(alert.length).toBeGreaterThan(0);
     });
 
@@ -503,12 +601,12 @@ d("database", () => {
         expect(await db.familyStatus(familyId)).toBe("accepted");
         const cap = await db.one<{ capacity_new: number }>(POSTGRES, "select capacity_new from public.clinicians where id = $1", [b.clinicianId]);
         expect(cap.capacity_new).toBe(1);
-        const msg = await db.one<{ payload: { calcom_intro_url: string } }>(
+        const msg = await db.one<{ payload: { match_id: string } }>(
           POSTGRES,
           "select payload from public.message_log where template = 'match_confirmed' and recipient_id = $1 limit 1",
           [familyId],
         );
-        expect(msg.payload.calcom_intro_url).toBe("https://cal.com/x/intro");
+        expect(msg.payload.match_id).toBe(offerB.match_id);
       } finally {
         await db.q(POSTGRES, `update public.settings set value = '"sequential"' where key = 'offer_mode'`);
       }

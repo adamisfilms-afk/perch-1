@@ -36,12 +36,14 @@ const bookingTime = (b: Booking) => (b.dateOnly ? formatDate(b.at) : formatDateT
 export function ClientInfo({ detail, onChanged }: { detail: ClientDetail; onChanged?: () => void }) {
   const { family, children, consents, matches } = detail;
   const allocated = matches.find((m) => m.state === "accepted");
+  const offered = matches.find((m) => m.state === "offered");
   return (
     <div className="space-y-8">
       <Section title="Clinician">
         <AllocateClinician
           familyId={family.id}
           current={allocated ? { id: allocated.clinician_id, name: allocated.clinician ?? "Clinician" } : null}
+          pending={offered ? { id: offered.clinician_id, name: offered.clinician ?? "Clinician", expiresAt: offered.offer_expires_at } : null}
           blockedReason={allocationBlockedReason(family.status)}
           onAllocated={onChanged}
         />

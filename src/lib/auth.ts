@@ -65,14 +65,9 @@ export const getViewer = cache(async (): Promise<Viewer> => {
 
 export async function requireStaff(roles: Role[] = STAFF_ROLES): Promise<Viewer> {
   const viewer = await getViewer();
-  if (!roles.includes(viewer.role)) redirect(viewer.role === "clinician" ? "/portal" : "/dashboard");
+  // Clinicians don't use logins any more (they have private links), so an old clinician login goes to /link.
+  if (!roles.includes(viewer.role)) redirect(viewer.role === "clinician" ? "/link" : "/dashboard");
   return viewer;
-}
-
-export async function requireClinician(): Promise<Viewer & { clinicianId: string }> {
-  const viewer = await getViewer();
-  if (viewer.role !== "clinician" || !viewer.clinicianId) redirect("/dashboard");
-  return viewer as Viewer & { clinicianId: string };
 }
 
 /** Turn a database error into a message a person can act on. */

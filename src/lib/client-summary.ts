@@ -24,6 +24,7 @@ export const CLIENT_STATUS_ORDER: FamilyStatus[] = [
 /** On this page a converted family is an active client, and an accepted offer is a match. */
 export const CLIENT_STATUS_LABELS: Record<FamilyStatus, string> = {
   ...FAMILY_STATUS_LABELS,
+  offered: "Offered to clinician",
   accepted: "Matched",
   converted: "Active",
 };
