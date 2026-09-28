@@ -32,7 +32,7 @@ function saved(message?: string): ActionState {
 export async function saveProfile(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const clinicianId = await currentClinicianId();
   if (!clinicianId) return { error: SIGNED_OUT };
-  const db = createAdminClient();
+  const db = createAdminClient("clinician");
   const { data: clinician } = await db.from("clinicians").select("*").eq("id", clinicianId).single<ClinicianRow>();
   if (!clinician) return { error: SIGNED_OUT };
   const { update, error, warning } = await parseProfile(fd, clinician);
@@ -46,7 +46,7 @@ export async function saveHours(_prev: ActionState, fd: FormData): Promise<Actio
   if (!clinicianId) return { error: SIGNED_OUT };
   const parsed = parseWindows(fd);
   if ("error" in parsed) return { error: parsed.error };
-  const { error } = await createAdminClient().rpc("save_clinician_availability", {
+  const { error } = await createAdminClient("clinician").rpc("save_clinician_availability", {
     p_clinician: clinicianId,
     p_timezone: String(fd.get("timezone") ?? "Australia/Sydney"),
     p_windows: parsed.windows,
@@ -61,7 +61,7 @@ export async function addDaysOff(_prev: ActionState, fd: FormData): Promise<Acti
   const starts = String(fd.get("starts_on") ?? "");
   const ends = String(fd.get("ends_on") ?? "") || starts;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(starts) || !/^\d{4}-\d{2}-\d{2}$/.test(ends)) return { error: "Choose the first and last day off" };
-  const { error } = await createAdminClient().rpc("add_time_off", {
+  const { error } = await createAdminClient("clinician").rpc("add_time_off", {
     p_profile: null,
     p_clinician: clinicianId,
     p_starts: starts,
@@ -74,7 +74,7 @@ export async function addDaysOff(_prev: ActionState, fd: FormData): Promise<Acti
 export async function removeDaysOff(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const clinicianId = await currentClinicianId();
   if (!clinicianId) return { error: SIGNED_OUT };
-  const { error } = await createAdminClient().rpc("remove_time_off", { p_id: String(fd.get("id")), p_clinician: clinicianId });
+  const { error } = await createAdminClient("clinician").rpc("remove_time_off", { p_id: String(fd.get("id")), p_clinician: clinicianId });
   return error ? { error: friendlyError(error) } : saved();
 }
 
@@ -85,7 +85,7 @@ export async function createUploadUrl(type: string, fileName: string): Promise<{
   if (!CREDENTIAL_TYPES.includes(type as CredentialType) || CREDENTIALS[type as CredentialType].sightedOnly) return { error: "Choose a document type" };
   const ext = (fileName.split(".").pop() ?? "pdf").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5);
   const path = `${clinicianId}/${type}-${crypto.randomUUID()}.${ext}`;
-  const { data, error } = await createAdminClient().storage.from("credentials").createSignedUploadUrl(path);
+  const { data, error } = await createAdminClient("clinician").storage.from("credentials").createSignedUploadUrl(path);
   if (error || !data) return { error: error?.message ?? "Couldn't start the upload" };
   return { path: data.path, token: data.token };
 }
@@ -94,7 +94,7 @@ export async function createUploadUrl(type: string, fileName: string): Promise<{
 export async function recordUpload(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const clinicianId = await currentClinicianId();
   if (!clinicianId) return { error: SIGNED_OUT };
-  const { error } = await createAdminClient().rpc("record_clinician_upload", {
+  const { error } = await createAdminClient("clinician").rpc("record_clinician_upload", {
     p_clinician: clinicianId,
     p_type: String(fd.get("type")),
     p_number: text(fd, "number"),
@@ -109,7 +109,7 @@ export async function submitApplication(_prev: ActionState, fd: FormData): Promi
   const clinicianId = await currentClinicianId();
   if (!clinicianId) return { error: SIGNED_OUT };
   if (fd.get("agree") !== "on") return { error: "Please tick to accept the service agreement" };
-  const { error } = await createAdminClient().rpc("submit_clinician_application", {
+  const { error } = await createAdminClient("clinician").rpc("submit_clinician_application", {
     p_clinician: clinicianId,
     p_agreement_version: AGREEMENT_VERSION,
   });
@@ -121,7 +121,7 @@ export async function submitApplication(_prev: ActionState, fd: FormData): Promi
 export async function confirmDetails(): Promise<ActionState> {
   const clinicianId = await currentClinicianId();
   if (!clinicianId) return { error: SIGNED_OUT };
-  const { error } = await createAdminClient().rpc("confirm_clinician_details", { p_clinician: clinicianId });
+  const { error } = await createAdminClient("clinician").rpc("confirm_clinician_details", { p_clinician: clinicianId });
   return error ? { error: friendlyError(error) } : saved("Thanks, you're all set for another year");
 }
 

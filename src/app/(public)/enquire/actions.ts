@@ -22,7 +22,7 @@ export async function submitEnquiry(_prev: ActionState, fd: FormData): Promise<A
     return { error: "Please check the highlighted fields.", fieldErrors: fieldErrors(parsed.error), values: raw };
   }
 
-  const db = createAdminClient();
+  const db = createAdminClient("family");
   const { data: allowed } = await db.rpc("check_rate_limit", { p_key: `enquiry:${ip ?? "unknown"}`, p_max: 5, p_window_seconds: 3600 });
   if (allowed === false) {
     return { error: "We've had several enquiries from your connection in the last hour. Please try again later, or email us.", values: raw };

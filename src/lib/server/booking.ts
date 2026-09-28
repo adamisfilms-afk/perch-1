@@ -8,7 +8,7 @@ import { bookingPath, linkSecret, readLinkToken, type BookingLinkKind } from "..
 import { CALL_LABELS, minutesFor, parseBookingSettings, type AppointmentKind, type BookingSettings } from "../booking/settings";
 import { availableSlots, pickHost, type HostSchedule, type Slot } from "../booking/slots";
 import { env } from "../env";
-import { createAdminClient } from "../supabase/admin";
+import { createAdminClient, type Actor } from "../supabase/admin";
 import { firstOf } from "../types";
 
 type Db = ReturnType<typeof createAdminClient>;
@@ -171,7 +171,7 @@ export async function bookSlot(token: string, startIso: string): Promise<BookRes
   const slot = view.slots.find((s) => Date.parse(s.start) === Date.parse(startIso));
   if (!slot) return { ok: false, error: "Sorry, that time is no longer available. Please choose another." };
 
-  const db = createAdminClient();
+  const db = createAdminClient(actorFor(view.kind));
   let host: string | null = null;
   if (view.kind !== "intro_call") {
     const since = new Date().toISOString();
@@ -192,8 +192,13 @@ export async function bookSlot(token: string, startIso: string): Promise<BookRes
 export async function cancelBooking(token: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const view = await resolveBooking(token);
   if (!view?.existing) return { ok: false, error: "There's no booking to cancel." };
-  const { error } = await createAdminClient().rpc("cancel_appointment", { p_id: view.existing.id, p_reason: "Cancelled from the booking link" });
+  const { error } = await createAdminClient(actorFor(view.kind)).rpc("cancel_appointment", { p_id: view.existing.id, p_reason: "Cancelled from the booking link" });
   return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+/** Clinicians book their own intake call; families book sign-up and intro calls. For the activity log. */
+function actorFor(kind: AppointmentKind): Actor {
+  return kind === "clinician_intake" ? "clinician" : "family";
 }
 
 export { CALL_LABELS };

@@ -233,32 +233,63 @@ export const CLINICIAN_STATUSES = [
   "offboarded",
 ] as const;
 export type ClinicianStatus = (typeof CLINICIAN_STATUSES)[number];
+/** In the words of the live workflow (see the clinician summary stages). The recruitment steps from documents
+ * requested to orientation are no longer used; a clinician still in one can be moved back into the workflow. */
 export const CLINICIAN_STATUS_LABELS: Record<ClinicianStatus, string> = {
-  applied: "Applied",
-  screening: "Screening call",
-  documents_requested: "Documents requested",
-  documents_verified: "Documents verified",
-  agreement_signed: "Agreement signed",
-  onboarding: "Onboarding",
-  orientation: "Orientation",
-  active: "Active",
+  applied: "Signed up",
+  screening: "Intake call booked",
+  documents_requested: "Documents requested (old step)",
+  documents_verified: "Documents verified (old step)",
+  agreement_signed: "Agreement signed (old step)",
+  onboarding: "Onboarding (old step)",
+  orientation: "Orientation (old step)",
+  active: "Ready",
   paused: "Paused",
   offboarded: "Off-boarded",
 };
 
+const OLD_STEP: ClinicianStatus[] = ["applied", "screening", "active", "offboarded"];
+
 /** Mirrors private.clinician_transition_allowed(). Off-boarding is allowed from anywhere. */
 export const CLINICIAN_TRANSITIONS: Record<ClinicianStatus, ClinicianStatus[]> = {
-  applied: ["screening", "documents_requested", "active", "offboarded"],
-  screening: ["documents_requested", "applied", "active", "offboarded"],
-  documents_requested: ["documents_verified", "agreement_signed", "active", "offboarded"],
-  documents_verified: ["agreement_signed", "documents_requested", "onboarding", "active", "offboarded"],
-  agreement_signed: ["documents_verified", "onboarding", "orientation", "active", "offboarded"],
-  onboarding: ["orientation", "active", "offboarded"],
-  orientation: ["active", "onboarding", "offboarded"],
+  applied: ["screening", "active", "offboarded"],
+  screening: ["applied", "active", "offboarded"],
+  documents_requested: OLD_STEP,
+  documents_verified: OLD_STEP,
+  agreement_signed: OLD_STEP,
+  onboarding: OLD_STEP,
+  orientation: OLD_STEP,
   active: ["paused", "offboarded"],
   paused: ["active", "offboarded"],
   offboarded: [],
 };
+
+/** A choice in a clinician's "Move to" list. "ready_intake" records the intake call (which makes them Ready). */
+export interface ClinicianMove {
+  value: ClinicianStatus | "ready_intake";
+  label: string;
+}
+
+/**
+ * The moves staff can make from a clinician's current step, in the live workflow's words:
+ * New / Application complete → Intake call booked → Ready (by recording the intake call) ↔ Paused, and Off-boarded.
+ */
+export function clinicianMoves(
+  c: { status: ClinicianStatus; application_submitted_at: string | null },
+  canRecordIntake: boolean,
+): ClinicianMove[] {
+  const beforeCall = c.application_submitted_at ? "Application complete" : "New";
+  const moves: ClinicianMove[] = [];
+  if (c.status === "active") moves.push({ value: "paused", label: "Paused" });
+  else if (c.status === "paused") moves.push({ value: "active", label: "Ready (reactivate)" });
+  else if (c.status !== "offboarded") {
+    if (c.status !== "applied") moves.push({ value: "applied", label: `${beforeCall} (intake call not booked)` });
+    if (c.status !== "screening") moves.push({ value: "screening", label: "Intake call booked" });
+    if (canRecordIntake && c.application_submitted_at) moves.push({ value: "ready_intake", label: "Ready (records the intake call)" });
+  }
+  if (c.status !== "offboarded") moves.push({ value: "offboarded", label: "Off-boarded" });
+  return moves;
+}
 
 export const PAUSE_REASONS = ["credentials", "clinician_request", "quality", "payment"] as const;
 export type PauseReason = (typeof PAUSE_REASONS)[number];

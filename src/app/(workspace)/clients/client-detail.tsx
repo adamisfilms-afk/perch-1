@@ -1,7 +1,8 @@
 // The tabs of a client's record (Info, Bookings, History), shared by the summary modal and the full record page.
 import { AllocateClinician } from "@/components/workspace/allocate-clinician";
 import { CopyLink } from "@/components/workspace/copy-link";
-import { BookingList, Empty, Facts, HistoryList, Section, type Booking } from "@/components/workspace/detail-parts";
+import { ActivityList } from "@/components/workspace/activity-list";
+import { BookingList, Empty, Facts, Section, type Booking } from "@/components/workspace/detail-parts";
 import { CLIENT_STATUS_LABELS, allocationBlockedReason, childFullName } from "@/lib/client-summary";
 import {
   CONCERN_LABELS,
@@ -11,7 +12,6 @@ import {
   SERVICE_LABELS,
   TIME_BLOCK_LABELS,
   type Concern,
-  type FamilyStatus,
   type TimeBlock,
 } from "@/lib/domain";
 import { formatAuMobile } from "@/lib/phone";
@@ -131,14 +131,11 @@ export function ClientBookings({ detail }: { detail: ClientDetail }) {
   );
 }
 
-/** Changes to their status, and every clinician they've been allocated. */
+/** Every clinician they've been offered, then everything that's happened (the record of their activity on Perch). */
 export function ClientHistory({ detail }: { detail: ClientDetail }) {
-  const { matches, history } = detail;
+  const { matches, activity } = detail;
   return (
     <div className="space-y-8">
-      <Section title="Status changes">
-        <HistoryList history={history} label={(s) => CLIENT_STATUS_LABELS[s as FamilyStatus] ?? s} formatAt={formatDateTime} />
-      </Section>
       <Section title="Clinicians">
         {!matches.length ? (
           <Empty>No clinician allocated yet.</Empty>
@@ -153,6 +150,9 @@ export function ClientHistory({ detail }: { detail: ClientDetail }) {
             ])}
           />
         )}
+      </Section>
+      <Section title="Activity">
+        <ActivityList items={activity} />
       </Section>
     </div>
   );

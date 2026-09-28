@@ -36,7 +36,7 @@ export async function startClinicianSession(token: string): Promise<void> {
 export async function endClinicianSession(): Promise<void> {
   const store = await cookies();
   const token = store.get(COOKIE)?.value;
-  if (token) await createAdminClient().rpc("end_clinician_session", { p_token: token });
+  if (token) await createAdminClient("clinician").rpc("end_clinician_session", { p_token: token });
   store.delete(COOKIE);
 }
 

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SimpleActionButton } from "@/components/forms";
 import { FirstSessionForm, IntroOutcomeForm } from "@/components/referral-forms";
 import { notFound } from "next/navigation";
@@ -8,7 +9,6 @@ import { requireStaff } from "@/lib/auth";
 import { allocationBlockedReason, childFullName } from "@/lib/client-summary";
 import {
   CONCERN_LABELS,
-  FAMILY_STATUS_LABELS,
   FAMILY_TRANSITIONS,
   FUNDING_LABELS,
   MANUAL_FAMILY_STATUSES,
@@ -18,9 +18,11 @@ import {
 } from "@/lib/domain";
 import { AllocateClinician } from "@/components/workspace/allocate-clinician";
 import { formatAuMobile } from "@/lib/phone";
+import { RecentActivity } from "@/components/workspace/recent-activity";
+import { loadActivity } from "@/lib/server/activity";
 import { createClient } from "@/lib/supabase/server";
 import { ageFrom, relativeHours, hoursSince, todayInAustralia } from "@/lib/time";
-import { firstOf, type ChildRow, type FamilyRow, type MatchRow, type StatusHistoryRow } from "@/lib/types";
+import { firstOf, type ChildRow, type FamilyRow, type MatchRow } from "@/lib/types";
 import { getClientDetail } from "../../clients/actions";
 import { CLIENT_TABS, ClientBookings, ClientHistory } from "../../clients/client-detail";
 import { StatusPill } from "../../clients/client-table";
@@ -90,7 +92,7 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
   if (!family) notFound();
   await supabase.rpc("log_access", { p_entity_type: "families", p_entity_id: id, p_action: "view" });
 
-  const [{ data: childRows }, { data: intake }, { data: matchRows }, { data: history }, { data: messages }, { data: people }, { data: consents }] =
+  const [{ data: childRows }, { data: intake }, { data: matchRows }, { data: messages }, { data: people }, { data: consents }] =
     await Promise.all([
       supabase.from("children").select("*").eq("family_id", id).order("created_at"),
       supabase.from("intake_calls").select("*").eq("family_id", id).order("created_at", { ascending: false }),
@@ -99,7 +101,6 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
         .select("*, clinicians(name), intro_calls(scheduled_at, outcome), conversions(first_session_at)")
         .eq("family_id", id)
         .order("created_at", { ascending: false }),
-      supabase.from("status_history").select("*").eq("entity_type", "family").eq("entity_id", id).order("at", { ascending: false }),
       supabase
         .from("message_log")
         .select("id, template, channel, status, scheduled_for, sent_at, last_error")
@@ -115,6 +116,7 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
   const child = children[0];
   const matches = (matchRows ?? []) as unknown as MatchWithClinician[];
   const names = new Map((people ?? []).map((p: { id: string; full_name: string }) => [p.id, p.full_name]));
+  const activity = await loadActivity(supabase, "family", id, names);
   const today = todayInAustralia();
 
   const inIntake = ["new", "contacted", "intake_booked", "intake_done"].includes(family.status);
@@ -267,18 +269,10 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
           )}
 
           <Card>
-            <CardTitle>Timeline</CardTitle>
-            <ol className="space-y-2 text-sm">
-              {((history ?? []) as StatusHistoryRow[]).map((h) => (
-                <li key={h.id}>
-                  <span className="font-medium">{FAMILY_STATUS_LABELS[h.to_status as keyof typeof FAMILY_STATUS_LABELS] ?? h.to_status}</span>
-                  <span className="block text-xs text-stone-500">
-                    <When at={h.at} /> · {h.by ? names.get(h.by) ?? "Staff" : "Automatic"}
-                    {h.reason && ` · ${h.reason}`}
-                  </span>
-                </li>
-              ))}
-            </ol>
+            <CardTitle action={<Link href={`/families/${family.id}?tab=history`} className="text-sm text-stone-600 underline underline-offset-4">Full history</Link>}>
+              Recent activity
+            </CardTitle>
+            <RecentActivity items={activity.filter((a) => a.source === "event").slice(0, 8)} />
           </Card>
 
           <Card>
