@@ -430,12 +430,15 @@ d("database", () => {
       const { id: applicant } = await db.one<{ id: string }>(SERVICE, "select public.submit_application($1) as id", [
         JSON.stringify({ name: "Nat Applicant", email: "nat.applicant@example.com", mobile: "+61400111444", profession: "speech_pathologist", experience_years: 2, suburb: "Carlton", postcode: "3053" }),
       ]);
-      await expect(book("clinician_intake", applicant, at(7, 1), lead)).rejects.toThrow(/can no longer be booked/); // not submitted yet
-      await db.q(POSTGRES, "update public.clinicians set application_submitted_at = now() where id = $1", [applicant]);
+      // straight after signing up, before the application is submitted
       const [{ id: intakeId }] = await book("clinician_intake", applicant, at(7, 1), lead);
       expect((await db.one<{ status: string }>(POSTGRES, "select status from public.clinicians where id = $1", [applicant])).status).toBe("screening");
       await db.q(SERVICE, "select public.cancel_appointment($1)", [intakeId]);
       expect((await db.one<{ status: string }>(POSTGRES, "select status from public.clinicians where id = $1", [applicant])).status).toBe("applied");
+      // not once they've gone live
+      await db.q(POSTGRES, "update public.clinicians set status = 'active' where id = $1", [applicant]).catch(() => undefined);
+      await db.q(POSTGRES, "update public.clinicians set status = 'offboarded' where id = $1", [applicant]);
+      await expect(book("clinician_intake", applicant, at(8, 1), lead)).rejects.toThrow(/can no longer be booked/);
     });
   });
 

@@ -116,7 +116,7 @@ export async function loadClinicianPage(clinicianId: string, token: string): Pro
     credentials: (creds ?? []) as CredentialRow[],
     applicationGaps: (gaps as string[] | null) ?? [],
     intakeCall:
-      onboarding && c.application_submitted_at
+      onboarding && ["applied", "screening"].includes(c.status)
         ? { url: bookingUrl("clinician_intake", c.id), startsAt: (intake as { starts_at: string } | null)?.starts_at ?? null }
         : null,
     openReferrals: rows

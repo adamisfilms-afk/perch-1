@@ -114,7 +114,7 @@ export async function submitApplication(token: string, _prev: ActionState, fd: F
   });
   if (error) return { error: explainGapsError(friendlyError(error)) };
   after(drainOutboxQuietly);
-  return saved(token, "Application submitted. We've emailed you a link to book your intake call.");
+  return saved(token, "Application submitted. Thanks! We'll check your documents before we make you live.");
 }
 
 export async function confirmDetails(token: string): Promise<ActionState> {

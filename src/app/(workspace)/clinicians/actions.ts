@@ -130,7 +130,7 @@ export async function getClinicianDetail(id: string): Promise<{ ok: true; detail
       })),
       links: {
         clinicianPage: clinicianUrl(clinician.id, clinician.link_version),
-        intakeCall: clinician.application_submitted_at && ["applied", "screening"].includes(clinician.status) ? bookingUrl("clinician_intake", clinician.id) : null,
+        intakeCall: ["applied", "screening"].includes(clinician.status) ? bookingUrl("clinician_intake", clinician.id) : null,
       },
       applicationGaps: (applicationGaps.data as string[] | null) ?? [],
       goLiveGaps: (goLiveGaps.data as string[] | null) ?? [],

@@ -110,15 +110,38 @@ export function ClinicianPageBody({ view }: { view: ClinicianPageView }) {
   );
 }
 
-/** Before they go live: finish the application, then book the intake call. */
+/** Before they go live: the intake call with the team (bookable straight away) and the application. */
 function Application({ view }: { view: ClinicianPageView }) {
   const c = view.clinician;
   const url = agreementUrl();
   return (
-    <section>
-      <h2 className={heading}>Your application</h2>
-      {!c.application_submitted_at ? (
-        view.applicationGaps.length > 0 ? (
+    <>
+      {view.intakeCall && (
+        <section>
+          <h2 className={heading}>Your intake call</h2>
+          {view.intakeCall.startsAt ? (
+            <p className="text-sm">
+              Booked for <strong>{formatDateTime(view.intakeCall.startsAt)}</strong>. We&apos;ll call your mobile.{" "}
+              <a href={view.intakeCall.url} className="underline underline-offset-4">
+                Change or cancel
+              </a>
+            </p>
+          ) : (
+            <div className="space-y-3 text-sm">
+              <p className="text-neutral-600">A short phone call with our team about joining the network. You can book it now, before finishing the rest.</p>
+              <a href={view.intakeCall.url} className="inline-block rounded-md bg-neutral-950 px-4 py-2 font-medium text-white hover:bg-neutral-800">
+                Book your intake call
+              </a>
+            </div>
+          )}
+        </section>
+      )}
+
+      <section>
+        <h2 className={heading}>Your application</h2>
+        {c.application_submitted_at ? (
+          <p className="text-sm text-neutral-700">Submitted {formatDate(c.application_submitted_at)}. Thanks! We&apos;ll check your documents before we make you live.</p>
+        ) : view.applicationGaps.length > 0 ? (
           <div className="space-y-2 text-sm">
             <p className="text-neutral-600">Before you can submit, please:</p>
             <ul className="list-disc space-y-1 pl-5">
@@ -147,26 +170,9 @@ function Application({ view }: { view: ClinicianPageView }) {
             </Checkbox>
             <SubmitButton pendingText="Submitting…">Submit application</SubmitButton>
           </ActionForm>
-        )
-      ) : view.intakeCall?.startsAt ? (
-        <p className="text-sm">
-          Thanks for applying. Your intake call is booked for <strong>{formatDateTime(view.intakeCall.startsAt)}</strong>. We&apos;ll check your documents
-          before the call.{" "}
-          <a href={view.intakeCall.url} className="underline underline-offset-4">
-            Change or cancel
-          </a>
-        </p>
-      ) : (
-        <div className="space-y-3 text-sm">
-          <p className="text-neutral-600">Thanks for submitting your application. The next step is a short intake call with our team.</p>
-          {view.intakeCall && (
-            <a href={view.intakeCall.url} className="inline-block rounded-md bg-neutral-950 px-4 py-2 font-medium text-white hover:bg-neutral-800">
-              Book your intake call
-            </a>
-          )}
-        </div>
-      )}
-    </section>
+        )}
+      </section>
+    </>
   );
 }
 

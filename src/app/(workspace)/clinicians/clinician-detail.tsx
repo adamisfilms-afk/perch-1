@@ -60,7 +60,7 @@ export function ClinicianInfo({
             items={[
               ["Signed up", formatDateTime(c.created_at)],
               ["Application", c.application_submitted_at ? `Submitted ${formatDateTime(c.application_submitted_at)}` : "Not submitted yet"],
-              ["Intake call", screeningAt ? `Booked for ${formatDateTime(screeningAt)}` : c.application_submitted_at ? "Not booked yet" : null],
+              ["Intake call", screeningAt ? `Booked for ${formatDateTime(screeningAt)}` : "Not booked yet"],
             ]}
           />
           {!c.application_submitted_at && applicationGaps.length > 0 && (
@@ -232,7 +232,7 @@ export function ClinicianBookings({ detail }: { detail: ClinicianDetail }) {
       {detail.links.intakeCall && (
         <Section title="Booking links">
           <CopyLink label="Intake call booking page" url={detail.links.intakeCall} />
-          <p className="mt-2 text-xs text-neutral-500">They were emailed this link when they submitted their application.</p>
+          <p className="mt-2 text-xs text-neutral-500">It&apos;s in their welcome email and on their private page.</p>
         </Section>
       )}
       <BookingList bookings={detail.bookings} now={detail.loadedAt} formatAt={bookingTime} />
