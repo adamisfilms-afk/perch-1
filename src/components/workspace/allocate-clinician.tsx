@@ -90,7 +90,7 @@ export function AllocateClinician({
         {blockedReason && <p className="text-sm text-neutral-500">{blockedReason}</p>}
         {saved && (
           <p className="text-sm text-emerald-800" role="status">
-            Saved. The family has been emailed the intro-call link, and the clinician has been told to expect them.
+            Saved. The family has been emailed a link to book their intro call, and the clinician has been told to expect them.
           </p>
         )}
       </div>
@@ -115,10 +115,10 @@ export function AllocateClinician({
         {byProfession.map(([profession, list]) => (
           <optgroup key={profession} label={PROFESSION_LABELS[profession]}>
             {list.map((c) => (
-              <option key={c.id} value={c.id} disabled={!c.hasIntroLink}>
+              <option key={c.id} value={c.id} disabled={!c.hasAvailability}>
                 {c.name}
                 {c.suburb ? ` · ${c.suburb}` : ""}
-                {c.hasIntroLink ? ` · ${c.capacity > 0 ? `${c.capacity} place${c.capacity === 1 ? "" : "s"} free` : "full"}` : " · no intro-call link yet"}
+                {c.hasAvailability ? ` · ${c.capacity > 0 ? `${c.capacity} place${c.capacity === 1 ? "" : "s"} free` : "full"}` : " · no available times yet"}
               </option>
             ))}
           </optgroup>
@@ -149,7 +149,7 @@ export function AllocateClinician({
         </button>
       </div>
       <p className="text-xs text-neutral-500">
-        Saving emails the family {current ? "the new" : "the"} clinician&apos;s intro-call link and tells the clinician to expect them
+        Saving emails the family a link to book an intro call in {current ? "the new" : "the"} clinician&apos;s available times, and tells the clinician to expect them
         {current ? `. ${current.name} is told the client has moved.` : "."}
       </p>
     </div>

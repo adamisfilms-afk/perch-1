@@ -1,5 +1,6 @@
 // The tabs of a client's record (Info, Bookings, History), shared by the summary modal and the full record page.
 import { AllocateClinician } from "@/components/workspace/allocate-clinician";
+import { CopyLink } from "@/components/workspace/copy-link";
 import { BookingList, Empty, Facts, HistoryList, Section, type Booking } from "@/components/workspace/detail-parts";
 import { CLIENT_STATUS_LABELS, allocationBlockedReason, childFullName } from "@/lib/client-summary";
 import {
@@ -111,7 +112,21 @@ export function ClientInfo({ detail, onChanged }: { detail: ClientDetail; onChan
 
 /** Sign-up calls, intro calls and first sessions: upcoming first, then past. */
 export function ClientBookings({ detail }: { detail: ClientDetail }) {
-  return <BookingList bookings={detail.bookings} now={detail.loadedAt} formatAt={bookingTime} />;
+  const { signupCall, introCall } = detail.links;
+  return (
+    <div className="space-y-8">
+      {(signupCall || introCall) && (
+        <Section title="Booking links">
+          <div className="space-y-2">
+            {signupCall && <CopyLink label="Sign-up call booking page" url={signupCall} />}
+            {introCall && <CopyLink label="Intro call booking page" url={introCall} />}
+          </div>
+          <p className="mt-2 text-xs text-neutral-500">The family was emailed this link. Send it again by text if they need it.</p>
+        </Section>
+      )}
+      <BookingList bookings={detail.bookings} now={detail.loadedAt} formatAt={bookingTime} />
+    </div>
+  );
 }
 
 /** Changes to their status, and every clinician they've been allocated. */

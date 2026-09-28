@@ -161,7 +161,7 @@ export function OffboardingForm({ action, checklist }: { action: FormAction; che
   const items: [string, string][] = [
     ["families_handed_over", "Current families handed over or transferred"],
     ["records_retention_confirmed", "Record retention confirmed"],
-    ["access_removed", "Switchboard and Cal.com access removed"],
+    ["access_removed", "Switchboard access removed"],
     ["final_statement_issued", "Final fee statement issued"],
     ["direct_debit_cancelled", "Direct debit cancelled after the final collection"],
   ];

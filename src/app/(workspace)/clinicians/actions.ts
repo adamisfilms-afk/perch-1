@@ -7,6 +7,7 @@ import { friendlyError, requireStaff } from "@/lib/auth";
 import { childFullName } from "@/lib/client-summary";
 import { ONBOARDING_STAGES, isOutOfDate } from "@/lib/clinician-summary";
 import type { CredentialType, FamilyStatus } from "@/lib/domain";
+import { availabilityUrl, bookingUrl } from "@/lib/server/booking";
 import { createClient } from "@/lib/supabase/server";
 import { todayInAustralia } from "@/lib/time";
 import { firstOf, type ClinicianRow, type CredentialRow } from "@/lib/types";
@@ -32,6 +33,9 @@ export interface ClinicianDetail {
   bookings: Booking[];
   /** When this was loaded: splits bookings into upcoming and past. */
   loadedAt: number;
+  /** Weekly hours families can book intro calls in, and the clinician's private links. */
+  availability: { day: number; start: string; end: string }[];
+  links: { availability: string; intakeCall: string | null };
   applicationGaps: string[];
   goLiveGaps: string[];
   clients: { family_id: string; name: string; status: FamilyStatus }[];
@@ -66,6 +70,7 @@ export async function getClinicianDetail(id: string): Promise<{ ok: true; detail
     supabase.from("status_history").select("from_status, to_status, reason, by, at").eq("entity_type", "clinician").eq("entity_id", id).order("at", { ascending: false }),
     supabase.from("profiles").select("id, full_name"),
   ]);
+  const { data: hours } = await supabase.from("availability").select("day_of_week, start_time, end_time").eq("clinician_id", id).order("day_of_week").order("start_time");
   const { data: agreements } = await supabase
     .from("agreements")
     .select("version, sent_at, signed_at, documenso_ref")
@@ -117,6 +122,15 @@ export async function getClinicianDetail(id: string): Promise<{ ok: true; detail
       outOfDate: [...latest.values()].filter((d) => d.out_of_date).length,
       bookings,
       loadedAt: Date.now(),
+      availability: (hours ?? []).map((h: { day_of_week: number; start_time: string; end_time: string }) => ({
+        day: h.day_of_week,
+        start: h.start_time.slice(0, 5),
+        end: h.end_time.slice(0, 5),
+      })),
+      links: {
+        availability: availabilityUrl(clinician.id, clinician.availability_link_version),
+        intakeCall: clinician.application_submitted_at && ["applied", "screening"].includes(clinician.status) ? bookingUrl("clinician_intake", clinician.id) : null,
+      },
       applicationGaps: (applicationGaps.data as string[] | null) ?? [],
       goLiveGaps: (goLiveGaps.data as string[] | null) ?? [],
       clients: matchRows.flatMap((m) => {

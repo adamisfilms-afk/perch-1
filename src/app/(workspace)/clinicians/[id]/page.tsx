@@ -186,6 +186,24 @@ export default async function ClinicianPage({ params, searchParams }: PageProps<
             </Card>
           )}
 
+          {clinician.status !== "offboarded" && (
+            <Card>
+              <CardTitle>Availability link</CardTitle>
+              <p className="mb-3 text-sm text-stone-600">
+                Their private page (no login) for the times families can book intro calls, and days off. It&apos;s in their welcome email.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <SimpleActionButton action={actions.sendAvailabilityLink.bind(null, id, false)} label="Email it to them" variant="secondary" />
+                <SimpleActionButton
+                  action={actions.sendAvailabilityLink.bind(null, id, true)}
+                  label="Reset and email a new link"
+                  variant="secondary"
+                  confirm="Cancel their current link and email a new one?"
+                />
+              </div>
+            </Card>
+          )}
+
           <Card>
             <CardTitle>Credentials</CardTitle>
             {pending.length > 0 && (

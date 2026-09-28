@@ -35,9 +35,6 @@ export function ClinicianProfileForm({ action, clinician }: { action: FormAction
         <Field label="Languages (comma separated)" name="languages">
           <Input name="languages" defaultValue={clinician.languages.join(", ")} />
         </Field>
-        <Field label="Cal.com intro-call link" name="calcom_intro_url" hint="Families get this link when you accept">
-          <Input name="calcom_intro_url" type="url" placeholder="https://cal.com/you/intro" defaultValue={clinician.calcom_intro_url ?? ""} />
-        </Field>
       </div>
 
       <CheckboxGroup

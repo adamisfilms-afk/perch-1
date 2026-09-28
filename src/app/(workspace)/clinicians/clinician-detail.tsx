@@ -1,5 +1,7 @@
 // The tabs of a clinician's record (Info, Documents, Bookings, History), shared by the summary modal and the full record page.
 import Link from "next/link";
+import type { ReactNode } from "react";
+import { CopyLink } from "@/components/workspace/copy-link";
 import { BookingList, Empty, Facts, HistoryList, Section, type Booking } from "@/components/workspace/detail-parts";
 import type { TabDef } from "@/components/workspace/tabs";
 import { CLIENT_STATUS_LABELS } from "@/lib/client-summary";
@@ -15,6 +17,7 @@ import {
   type ClinicianStatus,
   type CredentialType,
 } from "@/lib/domain";
+import { WEEKDAYS } from "@/lib/booking/settings";
 import { formatAuMobile } from "@/lib/phone";
 import { formatDate, formatDateTime } from "@/lib/time";
 import type { ClinicianDetail } from "./actions";
@@ -116,16 +119,30 @@ export function ClinicianInfo({
             ["Home visits", c.home_visits ? "Yes" : "No"],
             ["Telehealth", c.telehealth ? "Yes" : "No"],
             ["Capacity", `${c.capacity_new} new ${c.capacity_new === 1 ? "client" : "clients"}`],
-            [
-              "Intro-call link",
-              c.calcom_intro_url ? (
-                <a key="i" href={c.calcom_intro_url} target="_blank" rel="noreferrer" className="break-all underline underline-offset-4">
-                  {c.calcom_intro_url}
-                </a>
-              ) : null,
-            ],
           ]}
         />
+      </Section>
+
+      <Section title="Intro-call availability">
+        <Facts
+          items={[
+            ...WEEKDAYS.filter(([d]) => detail.availability.some((w) => w.day === d)).map(
+              ([d, label]) =>
+                [
+                  label,
+                  detail.availability
+                    .filter((w) => w.day === d)
+                    .map((w) => `${w.start}–${w.end}`)
+                    .join(", "),
+                ] as [string, ReactNode],
+            ),
+            ...(detail.availability.length ? [] : ([["Hours", "None set yet"]] as [string, ReactNode][])),
+            ["Time zone", c.timezone.replace("Australia/", "").replace("_", " ")],
+          ]}
+        />
+        <div className="mt-3">
+          <CopyLink label="Their availability page (no login)" url={detail.links.availability} />
+        </div>
       </Section>
 
       <Section title="Clients">
@@ -211,7 +228,17 @@ function DocumentTag({ status, outOfDate }: { status: string | null; outOfDate: 
 
 /** Their intake call, and intro calls and first sessions with their clients: upcoming first, then past. */
 export function ClinicianBookings({ detail }: { detail: ClinicianDetail }) {
-  return <BookingList bookings={detail.bookings} now={detail.loadedAt} formatAt={bookingTime} />;
+  return (
+    <div className="space-y-8">
+      {detail.links.intakeCall && (
+        <Section title="Booking links">
+          <CopyLink label="Intake call booking page" url={detail.links.intakeCall} />
+          <p className="mt-2 text-xs text-neutral-500">They were emailed this link when they submitted their application.</p>
+        </Section>
+      )}
+      <BookingList bookings={detail.bookings} now={detail.loadedAt} formatAt={bookingTime} />
+    </div>
+  );
 }
 
 export function ClinicianHistory({ detail }: { detail: ClinicianDetail }) {

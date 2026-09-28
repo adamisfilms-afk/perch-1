@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Paths anyone can open. Everything else needs a signed-in user
 // (the pages then check the role and multi-factor login themselves).
-const PUBLIC_PREFIXES = ["/enquire", "/join", "/privacy", "/login", "/auth", "/r", "/api/webhooks", "/api/cron"];
+const PUBLIC_PREFIXES = ["/enquire", "/join", "/privacy", "/login", "/auth", "/r", "/book", "/availability", "/api/webhooks", "/api/cron"];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));

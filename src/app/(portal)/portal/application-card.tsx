@@ -1,7 +1,7 @@
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Card, CardTitle, Checkbox, LinkButton } from "@/components/ui";
 import { applicationGapLabel } from "@/lib/domain";
-import { env } from "@/lib/env";
+import { bookingUrl } from "@/lib/server/booking";
 import { formatDateTime } from "@/lib/time";
 import type { ClinicianRow } from "@/lib/types";
 import { submitApplication } from "./actions";
@@ -54,20 +54,21 @@ export function ApplicationCard({ me, gaps }: { me: ClinicianRow; gaps: string[]
   }
 
   const screeningAt = typeof me.application.screening_at === "string" ? me.application.screening_at : null;
-  const booking = new URL(env.calcomRecruitmentUrl());
-  booking.searchParams.set("name", me.name);
-  booking.searchParams.set("metadata[clinician_id]", me.id);
+  const booking = bookingUrl("clinician_intake", me.id);
   return (
     <Card>
       <CardTitle>Intake call</CardTitle>
       {screeningAt ? (
         <p className="text-sm">
-          Booked for <strong>{formatDateTime(screeningAt)}</strong>. We&apos;ll check your documents before the call.
+          Booked for <strong>{formatDateTime(screeningAt)}</strong>. We&apos;ll check your documents before the call.{" "}
+          <a href={booking} className="underline">
+            Change or cancel
+          </a>
         </p>
       ) : (
         <>
           <p className="mb-3 text-sm text-stone-600">Thanks for submitting your application. The next step is a short intake call with our team.</p>
-          <LinkButton href={booking.toString()} size="sm">
+          <LinkButton href={booking} size="sm">
             Book your intake call
           </LinkButton>
         </>
