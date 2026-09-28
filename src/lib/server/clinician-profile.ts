@@ -25,8 +25,6 @@ export async function parseProfile(
   const radius = text(fd, "radius_km");
   const capacity = Number(text(fd, "capacity_new") ?? 0);
   if (!Number.isInteger(capacity) || capacity < 0 || capacity > 50) return { update: {}, error: "Capacity must be a whole number from 0 to 50" };
-  const calcom = text(fd, "calcom_intro_url");
-  if (calcom && !/^https:\/\/\S+$/.test(calcom)) return { update: {}, error: "The Cal.com link must start with https://" };
   const funding = pick(fd, "funding_types", FUNDING_TYPES).filter((f) => f !== "unsure") as ClinicianRow["funding_types"];
   if (funding.includes("ndis_agency_managed") && !current.ndis_registered) {
     return { update: {}, error: "Agency-managed NDIS families can only be seen by NDIS-registered clinicians. Upload your NDIS registration first." };
@@ -55,7 +53,6 @@ export async function parseProfile(
     telehealth: fd.get("telehealth") === "on",
     capacity_new: capacity,
     snoozed_until: text(fd, "snoozed_until"),
-    calcom_intro_url: calcom,
   };
 
   let warning: string | undefined;

@@ -8,6 +8,7 @@ import { friendlyError, requireStaff } from "@/lib/auth";
 import { STEP_TARGET_STATUSES } from "@/lib/client-summary";
 import type { Profession } from "@/lib/domain";
 import { drainOutboxQuietly } from "@/lib/notifications/outbox";
+import { bookingUrl } from "@/lib/server/booking";
 import { createClient } from "@/lib/supabase/server";
 import { firstOf, type ChildRow, type FamilyRow } from "@/lib/types";
 
@@ -35,6 +36,8 @@ export interface ClientDetail {
   bookings: Booking[];
   /** When this was loaded: splits bookings into upcoming and past. */
   loadedAt: number;
+  /** Booking pages staff can send by text or email, when that call can be booked. */
+  links: { signupCall: string | null; introCall: string | null };
 }
 
 /** Everything about one client, for the summary modal. Reads as the signed-in user, so RLS applies, and logs the view. */
@@ -127,6 +130,13 @@ export async function getClientDetail(id: string): Promise<{ ok: true; detail: C
       history: (history.data ?? []).map((h: ClientDetail["history"][number]) => ({ ...h, by: h.by ? (names.get(h.by) ?? null) : null })),
       bookings,
       loadedAt: Date.now(),
+      links: {
+        signupCall: ["new", "contacted", "intake_booked"].includes(family.status) ? bookingUrl("signup_call", family.id) : null,
+        introCall: (() => {
+          const live = matchRows.find((m) => m.state === "accepted");
+          return live && ["accepted", "intro_booked"].includes(family.status) ? bookingUrl("intro_call", live.id) : null;
+        })(),
+      },
     },
   };
 }
@@ -184,8 +194,8 @@ export interface AllocatableClinician {
   profession: Profession;
   suburb: string | null;
   capacity: number;
-  /** Families are emailed this link, so a clinician without one can't be allocated yet. */
-  hasIntroLink: boolean;
+  /** Families book their intro call in these times, so a clinician without any can't be allocated yet. */
+  hasAvailability: boolean;
 }
 
 /** Active clinicians staff can allocate a client to, by name. */
@@ -194,17 +204,17 @@ export async function listAllocatableClinicians(): Promise<AllocatableClinician[
   const supabase = await createClient();
   const { data } = await supabase
     .from("clinicians")
-    .select("id, name, profession, suburb, capacity_new, calcom_intro_url")
+    .select("id, name, profession, suburb, capacity_new, availability(id)")
     .eq("status", "active")
     .order("name");
   return (data ?? []).map(
-    (c: { id: string; name: string; profession: Profession; suburb: string | null; capacity_new: number; calcom_intro_url: string | null }) => ({
+    (c: { id: string; name: string; profession: Profession; suburb: string | null; capacity_new: number; availability: { id: string }[] | null }) => ({
       id: c.id,
       name: c.name,
       profession: c.profession,
       suburb: c.suburb,
       capacity: c.capacity_new,
-      hasIntroLink: !!c.calcom_intro_url,
+      hasAvailability: (c.availability ?? []).length > 0,
     }),
   );
 }

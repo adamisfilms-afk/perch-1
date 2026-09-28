@@ -406,11 +406,10 @@ export function requiredCredentialTypes(profession: Profession, homeVisits: bool
 export const GO_LIVE_GAP_LABELS: Record<string, string> = {
   agreement: "Service agreement signed",
   clinical_lead_approval: "Clinical lead approval",
-  calcom_intro_url: "Cal.com intro-call link",
   portal_account: "Portal account invited",
   age_groups: "Age groups",
   funding_types: "Funding types accepted",
-  availability: "Available time blocks",
+  availability: "Available times for intro calls",
 };
 
 /** What a clinician still needs before they can submit their application (see private.application_gaps()). */
@@ -421,10 +420,9 @@ export function applicationGapLabel(gap: string): string {
   }
   const labels: Record<string, string> = {
     mobile: "Add your mobile number",
-    calcom_intro_url: "Add your Cal.com intro-call link",
     age_groups: "Choose the age groups you see",
     funding_types: "Choose the funding types you accept",
-    availability: "Add your available times",
+    availability: "Add your available times for intro calls with families",
   };
   return labels[gap] ?? gap;
 }

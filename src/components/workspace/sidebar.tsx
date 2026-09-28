@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "../ui";
-import { FolderIcon, GridIcon, PersonIcon } from "./icons";
+import { CalendarIcon, FolderIcon, GridIcon, PersonIcon } from "./icons";
 
 const LINKS = [
   // A client's full record lives at /families/[id].
   { href: "/clients", label: "Clients", icon: FolderIcon, also: "/families/" },
   { href: "/clinicians", label: "Clinicians", icon: PersonIcon, also: null },
+  { href: "/calls", label: "Calls", icon: CalendarIcon, also: null },
   { href: "/dashboard", label: "Dashboards", icon: GridIcon, also: null },
 ];
 

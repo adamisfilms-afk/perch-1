@@ -12,6 +12,4 @@ export const env = {
   supabaseServiceKey: () => required("SUPABASE_SERVICE_ROLE_KEY"),
   appUrl: () => (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, ""),
   cronSecret: () => process.env.CRON_SECRET,
-  calcomIntakeUrl: () => process.env.CALCOM_INTAKE_URL ?? "https://cal.com/switchboard/intake",
-  calcomRecruitmentUrl: () => process.env.CALCOM_RECRUITMENT_URL ?? "https://cal.com/switchboard/screening",
 };

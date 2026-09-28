@@ -217,3 +217,12 @@ export async function updateOffboarding(clinicianId: string, _prev: ActionState,
   if (update.access_removed) await removeAccess(clinicianId);
   return done(clinicianId, update.completed_at ? "Off-boarding complete" : "Checklist saved");
 }
+
+/** Email the clinician their availability link; with `reset`, the old link stops working first. */
+export async function sendAvailabilityLink(clinicianId: string, reset: boolean): Promise<ActionState> {
+  await requireStaff();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("send_availability_link", { p_clinician: clinicianId, p_reset: reset });
+  if (error) return { error: friendlyError(error) };
+  return done(clinicianId, reset ? "Old link cancelled. A new one has been emailed." : "Availability link emailed");
+}

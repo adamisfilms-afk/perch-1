@@ -12,6 +12,7 @@ import {
   type Profession,
   type ServiceType,
 } from "../domain";
+import { availabilityPath, bookingPath } from "../booking/links";
 import { formatDate, formatDateTime } from "../time";
 
 export function renderTemplate(template: string, vars: Record<string, unknown>): string {
@@ -23,32 +24,41 @@ export function renderTemplate(template: string, vars: Record<string, unknown>):
 
 export interface LinkConfig {
   appUrl: string;
-  intakeBookingUrl: string;
-  /** Cal.com event clinicians book their intake (screening) call on. */
-  clinicianIntakeBookingUrl: string;
+  /** Signs booking and availability links (see src/lib/booking/links.ts). */
+  linkSecret: string;
 }
 
 /** Adds links and friendly labels to the values stored with the message. */
 export function buildVariables(payload: Record<string, unknown>, links: LinkConfig): Record<string, unknown> {
   const v: Record<string, unknown> = { ...payload };
+  const str = (k: string) => (typeof payload[k] === "string" ? (payload[k] as string) : null);
   v.app_url = links.appUrl;
   v.portal_url = `${links.appUrl}/portal`;
   v.documents_url = `${links.appUrl}/portal/documents`;
+  v.recipient_first_name = str("recipient_first_name") ?? str("parent_first_name") ?? str("clinician_first_name") ?? "there";
 
-  if (typeof payload.family_id === "string") {
-    const url = new URL(links.intakeBookingUrl);
-    if (typeof payload.parent_name === "string") url.searchParams.set("name", payload.parent_name);
-    // Cal.com passes metadata back in its webhook, so the booking links to the right family.
-    url.searchParams.set("metadata[family_id]", payload.family_id);
-    v.intake_booking_url = url.toString();
+  // Booking links: a family's sign-up call, a clinician's intake call, a family's intro call with their clinician.
+  const familyId = str("family_id");
+  const clinicianId = str("clinician_id");
+  const matchId = str("match_id");
+  if (familyId) v.intake_booking_url = links.appUrl + bookingPath(links.linkSecret, "signup_call", familyId);
+  if (clinicianId) v.screening_booking_url = links.appUrl + bookingPath(links.linkSecret, "clinician_intake", clinicianId);
+  if (matchId) {
+    v.intro_booking_url = links.appUrl + bookingPath(links.linkSecret, "intro_call", matchId);
+    v.calcom_intro_url = v.intro_booking_url; // messages queued before Cal.com was replaced
   }
-  if (typeof payload.clinician_id === "string" && typeof payload.clinician_name === "string") {
-    const url = new URL(links.clinicianIntakeBookingUrl);
-    url.searchParams.set("name", payload.clinician_name);
-    // Cal.com passes this back, so the booking moves the right clinician to Intake call booked.
-    url.searchParams.set("metadata[clinician_id]", payload.clinician_id);
-    v.screening_booking_url = url.toString();
+  if (clinicianId && typeof payload.availability_link_version === "number") {
+    v.availability_url = links.appUrl + availabilityPath(links.linkSecret, clinicianId, payload.availability_link_version);
   }
+  // Messages about a booked call link back to that booking's page.
+  const kind = str("appointment_kind");
+  const bookedClinician = str("booked_clinician_id");
+  const bookedMatch = str("booked_match_id");
+  if (kind === "signup_call" && familyId) v.booking_url = v.intake_booking_url;
+  if (kind === "clinician_intake" && bookedClinician) v.booking_url = links.appUrl + bookingPath(links.linkSecret, "clinician_intake", bookedClinician);
+  if (kind === "intro_call" && bookedMatch) v.booking_url = links.appUrl + bookingPath(links.linkSecret, "intro_call", bookedMatch);
+  if (str("record_path")) v.record_url = links.appUrl + str("record_path");
+
   if (typeof payload.portal_token_hash === "string") {
     const type = payload.portal_link_type === "recovery" ? "recovery" : "invite";
     v.portal_invite_url = `${links.appUrl}/auth/confirm?token_hash=${encodeURIComponent(payload.portal_token_hash)}&type=${type}`;
@@ -58,12 +68,6 @@ export function buildVariables(payload: Record<string, unknown>, links: LinkConf
   }
   if (typeof payload.token === "string") {
     v.first_session_url = `${links.appUrl}/r/first-session?token=${payload.token}`;
-  }
-  if (typeof payload.calcom_intro_url === "string" && typeof payload.match_id === "string") {
-    const url = new URL(payload.calcom_intro_url);
-    url.searchParams.set("metadata[match_id]", payload.match_id);
-    if (typeof payload.parent_name === "string") url.searchParams.set("name", payload.parent_name);
-    v.calcom_intro_url = url.toString();
   }
 
   if (payload.credential_type) v.credential_label = CREDENTIALS[payload.credential_type as CredentialType]?.label ?? payload.credential_type;

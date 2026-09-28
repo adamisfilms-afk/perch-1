@@ -301,7 +301,7 @@ d("database", () => {
       await db.q(POSTGRES, "update public.clinicians set status = 'documents_verified' where id = $1", [id]).catch(() => undefined);
       const gaps = await db.one<{ gaps: string[] }>(user(coordinator), "select public.clinician_go_live_gaps($1) as gaps", [id]);
       expect(gaps.gaps).toEqual(
-        expect.arrayContaining(["credential:ahpra", "credential:wwcc", "agreement", "clinical_lead_approval", "calcom_intro_url", "portal_account"]),
+        expect.arrayContaining(["credential:ahpra", "credential:wwcc", "agreement", "clinical_lead_approval", "availability", "portal_account"]),
       );
       expect(gaps.gaps).not.toContain("credential:spa_cpsp");
     });
@@ -319,6 +319,74 @@ d("database", () => {
       const { clinicianId } = await db.createActiveClinician();
       await expect(db.q(user(coordinator), "select public.approve_clinician($1)", [clinicianId])).rejects.toThrow(/clinical lead/);
       await db.q(user(lead), "select public.approve_clinician($1)", [clinicianId]);
+    });
+  });
+
+  describe("bookings", () => {
+    const at = (days: number, hour: number) => {
+      const d = new Date(Date.now() + days * 86_400_000);
+      d.setUTCHours(hour, 0, 0, 0);
+      return d.toISOString();
+    };
+    const book = (kind: string, ref: string, when: string, host: string | null = coordinator) =>
+      db.q(SERVICE, "select public.book_appointment($1::public.appointment_kind, $2, $3, 15, $4) as id", [kind, ref, when, host]);
+    const templates = (id: string) =>
+      db.q<{ template: string }>(POSTGRES, "select template from public.message_log where recipient_id = $1 or payload->>'appointment_id' = $2::text order by created_at", [id, id]);
+
+    it("lets staff set their own hours, and admins anyone's", async () => {
+      const windows = JSON.stringify([{ day: 2, start: "09:00", end: "12:00" }]);
+      await db.q(user(coordinator), "select public.save_staff_availability($1, 'Australia/Melbourne', true, false, $2)", [coordinator, windows]);
+      const [me] = await db.q<{ timezone: string; hosts_signup_calls: boolean }>(POSTGRES, "select timezone, hosts_signup_calls from public.profiles where id = $1", [coordinator]);
+      expect(me).toEqual({ timezone: "Australia/Melbourne", hosts_signup_calls: true });
+      await expect(db.q(user(coordinator), "select public.save_staff_availability($1, 'Australia/Sydney', true, true, '[]')", [lead])).rejects.toThrow(/your own/);
+      await db.q(user(admin), "select public.save_staff_availability($1, 'Australia/Sydney', false, true, $2)", [lead, windows]);
+      await expect(db.q(ANON, "select public.save_clinician_availability(gen_random_uuid(), 'Australia/Sydney', '[]')")).rejects.toThrow(/permission denied/);
+    });
+
+    it("books a sign-up call, moves the family on, and won't double-book the host", async () => {
+      const familyId = await db.submitEnquiry();
+      const when = at(3, 1);
+      const [{ id }] = await book("signup_call", familyId, when);
+      expect(await db.familyStatus(familyId)).toBe("intake_booked");
+      const [call] = await db.q<{ scheduled_at: Date }>(POSTGRES, "select scheduled_at from public.intake_calls where family_id = $1", [familyId]);
+      expect(call.scheduled_at.toISOString()).toBe(when);
+      const sent = (await templates(id as string)).map((m) => m.template);
+      expect(sent).toEqual(expect.arrayContaining(["booking_confirmed", "booking_host"]));
+
+      const other = await db.submitEnquiry();
+      await expect(book("signup_call", other, when)).rejects.toThrow(/just been taken/);
+      await expect(book("signup_call", familyId, at(4, 1))).rejects.toThrow(/already booked/);
+      await expect(db.q(user(coordinator), "select public.book_appointment('signup_call', $1, now() + interval '5 days', 15, $2)", [other, coordinator])).rejects.toThrow(/permission denied/);
+
+      const later = at(5, 2);
+      await db.q(SERVICE, "select public.reschedule_appointment($1, $2, null)", [id, later]);
+      const [moved] = await db.q<{ scheduled_at: Date }>(POSTGRES, "select scheduled_at from public.intake_calls where family_id = $1", [familyId]);
+      expect(moved.scheduled_at.toISOString()).toBe(later);
+
+      await db.q(user(coordinator), "select public.cancel_appointment($1, 'Family asked')", [id]);
+      expect(await db.familyStatus(familyId)).toBe("contacted");
+      expect((await templates(id as string)).map((m) => m.template)).toEqual(expect.arrayContaining(["booking_cancelled", "booking_cancelled_host"]));
+      await book("signup_call", other, when); // the time is free again
+    });
+
+    it("books an intro call with the allocated clinician, and a clinician's intake call with the team", async () => {
+      const a = await db.createActiveClinician({ name: "Intro Host" });
+      const { familyId } = await db.createReadyFamily();
+      const [{ match }] = await db.q<{ match: string }>(user(coordinator), "select public.allocate_clinician($1, $2) as match", [familyId, a.clinicianId]);
+      const [{ id: introId }] = await book("intro_call", match, at(6, 5), null);
+      expect(await db.familyStatus(familyId)).toBe("intro_booked");
+      await db.q(SERVICE, "select public.cancel_appointment($1)", [introId]);
+      expect(await db.familyStatus(familyId)).toBe("accepted");
+
+      const { id: applicant } = await db.one<{ id: string }>(SERVICE, "select public.submit_application($1) as id", [
+        JSON.stringify({ name: "Nat Applicant", email: "nat.applicant@example.com", mobile: "+61400111444", profession: "speech_pathologist", experience_years: 2, suburb: "Carlton", postcode: "3053" }),
+      ]);
+      await expect(book("clinician_intake", applicant, at(7, 1), lead)).rejects.toThrow(/can no longer be booked/); // not submitted yet
+      await db.q(POSTGRES, "update public.clinicians set application_submitted_at = now() where id = $1", [applicant]);
+      const [{ id: intakeId }] = await book("clinician_intake", applicant, at(7, 1), lead);
+      expect((await db.one<{ status: string }>(POSTGRES, "select status from public.clinicians where id = $1", [applicant])).status).toBe("screening");
+      await db.q(SERVICE, "select public.cancel_appointment($1)", [intakeId]);
+      expect((await db.one<{ status: string }>(POSTGRES, "select status from public.clinicians where id = $1", [applicant])).status).toBe("applied");
     });
   });
 

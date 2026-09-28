@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "../supabase/admin";
+import { linkSecret } from "../booking/links";
 import { env } from "../env";
 import { buildVariables, renderTemplate } from "./render";
 import { sendEmail, sendSlack, sendSms, type SendResult } from "./providers";
@@ -40,8 +41,16 @@ async function stillRelevant(db: SupabaseClient, m: QueuedMessage): Promise<stri
       return firstOf(data.conversions as unknown) ? "First session already confirmed" : null;
     }
     case "intake_reminder": {
-      const { data } = await db.from("families").select("status").eq("id", m.recipient_id).maybeSingle();
-      return data?.status === "intake_booked" ? null : "Intake call no longer booked";
+      // Still booked, and still at the time the reminder was queued for (not moved).
+      const { data } = await db
+        .from("intake_calls")
+        .select("id, families!inner(status)")
+        .eq("family_id", m.recipient_id)
+        .eq("scheduled_at", m.payload.starts_at as string)
+        .is("completed_at", null)
+        .eq("families.status", "intake_booked")
+        .limit(1);
+      return data?.length ? null : "Sign-up call moved, cancelled or done";
     }
     case "intro_reminder":
     case "intro_reminder_clinician": {
@@ -68,7 +77,7 @@ export async function drainOutbox(limit = 50): Promise<{ sent: number; skipped: 
 
   const { data: templates } = await db.from("message_templates").select("key, channel, subject, body");
   const byKey = new Map((templates as Template[] | null)?.map((t) => [`${t.key}:${t.channel}`, t]));
-  const links = { appUrl: env.appUrl(), intakeBookingUrl: env.calcomIntakeUrl(), clinicianIntakeBookingUrl: env.calcomRecruitmentUrl() };
+  const links = { appUrl: env.appUrl(), linkSecret: linkSecret() };
 
   for (const m of messages) {
     let result: SendResult;
