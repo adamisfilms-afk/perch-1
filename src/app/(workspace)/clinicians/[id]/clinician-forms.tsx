@@ -8,7 +8,7 @@ import { CLINICIAN_STATUS_LABELS, CREDENTIALS, PAUSE_LABELS, PAUSE_REASONS, type
 export function StatusForm({ action, options }: { action: FormAction; options: ClinicianStatus[] }) {
   const [status, setStatus] = useState<string>("");
   return (
-    <ActionForm action={action} confirm={status === "offboarded" ? "Off-board this clinician? Their private link stops working immediately." : undefined}>
+    <ActionForm action={action} confirm={status === "offboarded" ? "Off-board this clinician? They're signed out of their Perch page immediately." : undefined}>
       <Field label="Move to" name="status">
         <Select
           name="status"

@@ -140,7 +140,7 @@ export function ClinicianInfo({
           ]}
         />
         <div className="mt-3">
-          <CopyLink label="Their private Perch page (no login)" url={detail.links.clinicianPage} />
+          <CopyLink label="Their Perch page (they sign in with an emailed code)" url={detail.links.clinicianPage} />
         </div>
       </Section>
 

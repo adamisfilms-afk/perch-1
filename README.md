@@ -15,7 +15,7 @@ Built from the product spec v0.1 (23 Sep 2026). This is the **MVP** scope (spec 
 | **Conversion** | Intro-call outcome, one-click "first session booked?" email link, automatic 2-week family and 6-week clinician follow-ups. |
 | **Clinician lifecycle** | Recruitment statuses, go-live checklist and gate, credential tracking and verification queue, "sighted only" for licence and car insurance, ABN Lookup, Documenso agreement, private clinician links (email or reset from their record), off-boarding checklist. |
 | **Credential automation** | Daily job: 60/30/7-day reminders, staff alert at 7 days, automatic **Paused (credentials)** on expiry (open offers withdrawn), automatic reactivation once a new document is verified, yearly re-credentialing prompt. |
-| **Clinicians: no login** | Each clinician has a private page (`/clinician/…`, from the link in every email we send them): profile, capacity, snooze, intro-call hours and days off, document uploads, the service agreement and application, and their intake call. Each referral has its own page (`/referral/…`) to accept or decline, then record the intro call and first session. These pages never show family names or contact details: those go to the clinician by email when they accept. Lost links: `/link` emails it again. Staff can reset a clinician's link, which stops the old one (and their referral links) working. |
+| **Clinicians: no password** | Each clinician has their own page (`/clinician`): profile, capacity, snooze, intro-call hours and days off, document uploads, the service agreement and application, and their intake call. They sign in with their email and a 6-digit code we email them (10 minutes, one use, 5 tries), and stay signed in on that device for 30 days. Links in our emails (`/clinician/…`) fill in who they are, so they only click "Email a code". Each referral has its own page (`/referral/…`) that opens in one click to accept or decline, then record the intro call and first session. These pages never show family names or contact details: those go to the clinician by email when they accept. Staff can "sign them out everywhere", which also cancels their old links. |
 | **Dashboard & metrics** | Operations dashboard (funnel, stale families, open offers, waitlist reasons, expiring credentials, paused clinicians) and the §7 key metrics with breakdowns. |
 | **Admin** | Settings (offer mode, windows, stale limits, reminder days, MFA…), editable message templates, staff invites and access removal, manual job runs, failed-message log. |
 
@@ -29,7 +29,7 @@ Built from the product spec v0.1 (23 Sep 2026). This is the **MVP** scope (spec 
   - clinician allocation and offers (`allocate_clinician`, `respond_to_referral`). The older shortlist functions are still in the database but the app no longer uses them;
   - credential expiry, reminders and auto-pause/reactivation;
   - an **outbox** (`message_log`): database functions queue emails/SMS/Slack, the app sends them (`/api/cron/tick`, and straight after each action), retrying with backoff. Nothing is lost if a provider is down.
-- **Row-level security on every table.** Every role check also requires multi-factor login (`aal2`), so a stolen password alone can't read family data, even through the API. The public role has no table access at all. Clinicians don't log in: their pages are opened from HMAC-signed links (`src/lib/booking/links.ts`) that name one clinician or referral and carry a version staff can bump, and the server acts for them through service-only database functions that check the state (e.g. only an open offer can be accepted).
+- **Row-level security on every table.** Every role check also requires multi-factor login (`aal2`), so a stolen password alone can't read family data, even through the API. The public role has no table access at all. Clinicians have no database login: their own page needs an emailed code, which starts a session kept in an httpOnly cookie (only hashes of codes and sessions are stored; `src/lib/server/clinician-session.ts`). Referral pages open from HMAC-signed links (`src/lib/booking/links.ts`) that name one referral and carry a version staff can bump. Either way the server acts for them through service-only database functions that check the state (e.g. only an open offer can be accepted).
 - **Audit log** of every change to family, clinician and credential data (column names only, never values), plus explicit view/download logging.
 - Documents live in a **private bucket**, uploaded straight from the browser with one-time signed upload URLs and opened only through 60-second signed links.
 
@@ -37,7 +37,7 @@ Built from the product spec v0.1 (23 Sep 2026). This is the **MVP** scope (spec 
 src/app/(public)     enquiry and join forms, privacy notice
 src/app/(auth)       login, MFA set-up/verify, password
 src/app/(workspace)  the redesigned workspace (sidebar layout): clients, clinicians, calls
-src/app/(booking)    no-login pages from signed links: bookings (/book/…), clinician pages (/clinician/…), referrals (/referral/…), /link
+src/app/(booking)    pages from links in emails: bookings (/book/…), referrals (/referral/…), and clinicians' own page (/clinician, emailed-code sign-in)
 src/app/(staff)      dashboard, families, waitlist, clinicians, verification, metrics, settings
 src/app/api          Documenso webhook, cron, signed file access
 supabase/migrations  schema, business rules, RLS, pg_cron, message templates
@@ -58,7 +58,7 @@ npm run seed:demo                  # demo staff, clinicians and families
 npm run dev
 ```
 
-Log in at http://localhost:3000/login with `admin@switchboard.test`, `coordinator@switchboard.test` or `lead@switchboard.test`, password `switchboard-demo-2026`. You'll be asked to set up an authenticator app on first login. Clinicians don't log in: open a clinician's record and copy their private link.
+Log in at http://localhost:3000/login with `admin@switchboard.test`, `coordinator@switchboard.test` or `lead@switchboard.test`, password `switchboard-demo-2026`. You'll be asked to set up an authenticator app on first login. Clinicians sign in at http://localhost:3000/clinician with an emailed code; without email keys, read the code from the message log.
 
 Without email/SMS keys, messages are marked **skipped** in the message log instead of sent. A Mapbox token is optional: it only places clinicians on the map; families give their state on the enquiry form.
 

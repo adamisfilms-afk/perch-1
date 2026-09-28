@@ -183,18 +183,18 @@ export default async function ClinicianPage({ params, searchParams }: PageProps<
 
           {clinician.status !== "offboarded" && (
             <Card>
-              <CardTitle>Their private link</CardTitle>
+              <CardTitle>Their Perch page</CardTitle>
               <p className="mb-3 text-sm text-stone-600">
-                Clinicians don&apos;t log in. Their private page (in every email we send them) is where they update their profile, intro-call hours, days
-                off and documents, and submit their application. They can also get it again at /link.
+                Where they update their profile, intro-call hours, days off and documents, and submit their application. They sign in at /clinician
+                with their email and a 6-digit code we email them, and stay signed in on that device for 30 days. Every email we send them links to it.
               </p>
               <div className="flex flex-wrap gap-2">
-                <SimpleActionButton action={actions.sendClinicianLink.bind(null, id, false)} label="Email it to them" variant="secondary" />
+                <SimpleActionButton action={actions.sendClinicianLink.bind(null, id, false)} label="Email them the link" variant="secondary" />
                 <SimpleActionButton
                   action={actions.sendClinicianLink.bind(null, id, true)}
-                  label="Reset and email a new link"
+                  label="Sign them out everywhere"
                   variant="secondary"
-                  confirm="Cancel their current link and email a new one?"
+                  confirm="Sign them out on every device and cancel their old links (including referral links)? They'll be emailed a new link."
                 />
               </div>
             </Card>

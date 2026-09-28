@@ -1,10 +1,11 @@
 import "server-only";
 
-// Clinicians don't log in. Each has a private page (/clinician/<link>) and a page per referral
-// (/referral/<link>), opened from signed links in their emails. This checks those links and loads what the
-// pages show. It runs with the service role because nobody is signed in, so it only ever reads that
-// clinician's own data. Family names and contact details are never shown on these pages: clinicians get
-// them by email once they accept a referral.
+// Clinicians have no database login. Their own page (/clinician) needs an emailed sign-in code
+// (see clinician-session.ts); the signed link in their emails (/clinician/<link>) only says who they are.
+// Each referral has a page (/referral/<link>) that opens from its signed link in one click. This checks those
+// links and loads what the pages show, with the service role, reading only that clinician's own data.
+// Family names and contact details are never shown on these pages: clinicians get them by email once they
+// accept a referral.
 
 import { clinicianPath, linkSecret, readLinkToken, referralPath } from "../booking/links";
 import type { FundingType, ServiceType, TimeBlock } from "../domain";
@@ -58,7 +59,6 @@ export interface OpenReferral {
 
 export interface ClinicianPageView {
   clinician: ClinicianRow;
-  token: string;
   windows: { day: number; start: string; end: string }[];
   timeOff: { id: string; starts_on: string; ends_on: string; note: string | null }[];
   /** Times only: no family details on this page. */
@@ -71,7 +71,7 @@ export interface ClinicianPageView {
   introMinutes: number;
 }
 
-export async function loadClinicianPage(clinicianId: string, token: string): Promise<ClinicianPageView | null> {
+export async function loadClinicianPage(clinicianId: string): Promise<ClinicianPageView | null> {
   const db = createAdminClient();
   const today = new Date().toISOString().slice(0, 10);
   const nowIso = new Date().toISOString();
@@ -105,7 +105,6 @@ export async function loadClinicianPage(clinicianId: string, token: string): Pro
 
   return {
     clinician: c,
-    token,
     windows: (windows ?? []).map((w: { day_of_week: number; start_time: string; end_time: string }) => ({
       day: w.day_of_week,
       start: w.start_time.slice(0, 5),

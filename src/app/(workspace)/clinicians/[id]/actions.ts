@@ -215,5 +215,5 @@ export async function sendClinicianLink(clinicianId: string, reset: boolean): Pr
   const supabase = await createClient();
   const { error } = await supabase.rpc("send_clinician_link", { p_clinician: clinicianId, p_reset: reset });
   if (error) return { error: friendlyError(error) };
-  return done(clinicianId, reset ? "Old link cancelled. A new one has been emailed." : "Their link has been emailed");
+  return done(clinicianId, reset ? "Signed out everywhere and old links cancelled. A new link has been emailed." : "Their link has been emailed");
 }
