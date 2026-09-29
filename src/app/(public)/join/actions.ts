@@ -20,7 +20,7 @@ export async function submitApplication(_prev: ActionState, fd: FormData): Promi
   if (!parsed.success) {
     return { error: "Please check the highlighted fields.", fieldErrors: fieldErrors(parsed.error), values: raw };
   }
-  const db = createAdminClient();
+  const db = createAdminClient("clinician");
   const { data: allowed } = await db.rpc("check_rate_limit", { p_key: `apply:${ip ?? "unknown"}`, p_max: 5, p_window_seconds: 3600 });
   if (allowed === false) return { error: "Too many applications from your connection. Please try again later.", values: raw };
 

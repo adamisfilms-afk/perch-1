@@ -58,20 +58,28 @@ export async function updateScreeningNotes(id: string, _prev: ActionState, fd: F
 }
 
 export async function changeStatus(id: string, _prev: ActionState, fd: FormData): Promise<ActionState> {
-  await requireStaff();
-  const status = String(fd.get("status")) as ClinicianStatus;
-  if (!CLINICIAN_STATUSES.includes(status)) return { error: "Choose a status" };
+  const viewer = await requireStaff();
+  const status = String(fd.get("status"));
+  const supabase = await createClient();
+  if (status === "ready_intake") {
+    if (!["admin", "clinical_lead"].includes(viewer.role)) return { error: "Only a clinical lead or admin can record the intake call" };
+    const { error } = await supabase.rpc("complete_clinician_intake", { p_clinician: id, p_notes: text(fd, "reason") });
+    if (error) return { error: explainGapsError(friendlyError(error)) };
+    revalidatePath("/clinicians");
+    return done(id, "Intake call recorded. They're ready for clients.");
+  }
+  if (!CLINICIAN_STATUSES.includes(status as ClinicianStatus)) return { error: "Choose a status" };
   const pause = text(fd, "pause_reason");
   if (pause && !(PAUSE_REASONS as readonly string[]).includes(pause)) return { error: "Unknown pause reason" };
-  const supabase = await createClient();
   const { error } = await supabase.rpc("set_clinician_status", {
     p_clinician: id,
     p_status: status,
     p_pause_reason: status === "paused" ? pause : null,
     p_reason: text(fd, "reason"),
   });
-  if (error) return { error: friendlyError(error) };
+  if (error) return { error: explainGapsError(friendlyError(error)) };
   if (status === "offboarded") await removeAccess(id);
+  revalidatePath("/clinicians");
   return done(id, "Status updated");
 }
 

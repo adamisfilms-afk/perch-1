@@ -9,6 +9,7 @@ import { STEP_TARGET_STATUSES } from "@/lib/client-summary";
 import type { Profession } from "@/lib/domain";
 import { drainOutboxQuietly } from "@/lib/notifications/outbox";
 import { bookingUrl } from "@/lib/server/booking";
+import { loadActivity, type ActivityEntry } from "@/lib/server/activity";
 import { createClient } from "@/lib/supabase/server";
 import { firstOf, type ChildRow, type FamilyRow } from "@/lib/types";
 
@@ -32,7 +33,8 @@ export interface ClientDetail {
     intro_outcome: string | null;
     first_session_at: string | null;
   }[];
-  history: { from_status: string | null; to_status: string; reason: string | null; by: string | null; at: string }[];
+  /** Every event and message, newest first (the History tab). */
+  activity: ActivityEntry[];
   /** Sign-up calls, intro calls and first sessions, in no particular order. */
   bookings: Booking[];
   /** When this was loaded: splits bookings into upcoming and past. */
@@ -50,7 +52,7 @@ export async function getClientDetail(id: string): Promise<{ ok: true; detail: C
   if (!family) return { ok: false, error: "This client couldn't be found." };
   await supabase.rpc("log_access", { p_entity_type: "families", p_entity_id: id, p_action: "view" });
 
-  const [children, consents, intake, matches, history, people] = await Promise.all([
+  const [children, consents, intake, matches, people] = await Promise.all([
     supabase.from("children").select("*").eq("family_id", id).order("created_at"),
     supabase.from("consents").select("type, version, granted_at, withdrawn_at").eq("family_id", id).order("granted_at"),
     supabase.from("intake_calls").select("id, scheduled_at, completed_at, outcome, outcome_reason, notes").eq("family_id", id).order("created_at", { ascending: false }),
@@ -60,7 +62,6 @@ export async function getClientDetail(id: string): Promise<{ ok: true; detail: C
       .eq("family_id", id)
       .not("offered_at", "is", null)
       .order("offered_at", { ascending: false }),
-    supabase.from("status_history").select("from_status, to_status, reason, by, at").eq("entity_type", "family").eq("entity_id", id).order("at", { ascending: false }),
     supabase.from("profiles").select("id, full_name"),
   ]);
   const names = new Map((people.data ?? []).map((p: { id: string; full_name: string }) => [p.id, p.full_name]));
@@ -130,7 +131,7 @@ export async function getClientDetail(id: string): Promise<{ ok: true; detail: C
           first_session_at: firstOf(m.conversions)?.first_session_at ?? null,
         };
       }),
-      history: (history.data ?? []).map((h: ClientDetail["history"][number]) => ({ ...h, by: h.by ? (names.get(h.by) ?? null) : null })),
+      activity: await loadActivity(supabase, "family", id, names),
       bookings,
       loadedAt: Date.now(),
       links: {

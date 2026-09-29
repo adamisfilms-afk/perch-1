@@ -3,29 +3,29 @@
 import { useState } from "react";
 import { ActionForm, SubmitButton, type FormAction } from "@/components/forms";
 import { Checkbox, Field, Input, Select, Textarea } from "@/components/ui";
-import { CLINICIAN_STATUS_LABELS, CREDENTIALS, PAUSE_LABELS, PAUSE_REASONS, type ClinicianStatus, type CredentialType } from "@/lib/domain";
+import { CREDENTIALS, PAUSE_LABELS, PAUSE_REASONS, type ClinicianMove, type CredentialType } from "@/lib/domain";
 
-export function StatusForm({ action, options }: { action: FormAction; options: ClinicianStatus[] }) {
+export function StatusForm({ action, options }: { action: FormAction; options: ClinicianMove[] }) {
   const [status, setStatus] = useState<string>("");
   return (
     <ActionForm action={action} confirm={status === "offboarded" ? "Off-board this clinician? They're signed out of their Perch page immediately." : undefined}>
       <Field label="Move to" name="status">
-        <Select
-          name="status"
-          placeholder="Choose…"
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          options={options.map((s) => [s, CLINICIAN_STATUS_LABELS[s]] as const)}
-        />
+        <Select name="status" placeholder="Choose…" value={status} onChange={(e) => setStatus(e.target.value)} options={options.map((o) => [o.value, o.label] as const)} />
       </Field>
       {status === "paused" && (
         <Field label="Why?" name="pause_reason">
           <Select name="pause_reason" options={PAUSE_REASONS.map((p) => [p, PAUSE_LABELS[p]] as const)} />
         </Field>
       )}
-      <Field label="Note" name="reason">
-        <Input name="reason" />
-      </Field>
+      {status === "ready_intake" ? (
+        <Field label="Intake call notes" name="reason" hint="Only works once their documents are verified and their profile and hours are in">
+          <Textarea name="reason" maxLength={4000} />
+        </Field>
+      ) : (
+        <Field label="Note" name="reason">
+          <Input name="reason" />
+        </Field>
+      )}
       <SubmitButton variant="secondary" size="sm">
         Update status
       </SubmitButton>
@@ -135,7 +135,7 @@ export function AgreementSignedForm({ action }: { action: FormAction }) {
 export function IntakeCallForm({ action }: { action: FormAction }) {
   return (
     <ActionForm action={action}>
-      <Field label="Intake call notes" name="notes" hint="Saved as their screening notes">
+      <Field label="Intake call notes" name="notes" hint="Added to their intake call notes (leave blank to keep what's there)">
         <Textarea name="notes" maxLength={4000} />
       </Field>
       <SubmitButton size="sm">Record intake call: ready for clients</SubmitButton>
@@ -146,7 +146,7 @@ export function IntakeCallForm({ action }: { action: FormAction }) {
 export function NotesForm({ action, notes }: { action: FormAction; notes: string | null }) {
   return (
     <ActionForm action={action}>
-      <Field label="Screening notes" name="screening_notes">
+      <Field label="Intake call notes" name="screening_notes" hint="Anything from the intake call. You can add these before or after it's recorded.">
         <Textarea name="screening_notes" maxLength={4000} defaultValue={notes ?? ""} />
       </Field>
       <SubmitButton size="sm" variant="secondary">

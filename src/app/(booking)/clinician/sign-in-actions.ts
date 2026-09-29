@@ -34,7 +34,7 @@ async function withinLimit(db: Db, what: string, max: number): Promise<boolean> 
 }
 
 export async function requestCode(_prev: ActionState, fd: FormData): Promise<ActionState> {
-  const db = createAdminClient();
+  const db = createAdminClient("clinician");
   const email = await emailFor(db, fd);
   if (!email) return { error: fd.get("token") ? "This link has expired. Enter your email instead." : "Enter the email address you signed up with" };
   if (!(await withinLimit(db, "clinician-code", 10))) return { error: "Too many codes requested. Please try again in an hour." };
@@ -49,7 +49,7 @@ export async function requestCode(_prev: ActionState, fd: FormData): Promise<Act
 }
 
 export async function verifyCode(_prev: ActionState, fd: FormData): Promise<ActionState> {
-  const db = createAdminClient();
+  const db = createAdminClient("clinician");
   const email = await emailFor(db, fd);
   const code = String(fd.get("code") ?? "").replace(/\D/g, "");
   if (!email) return { error: "Start again: enter your email to get a new code." };

@@ -2,7 +2,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { CopyLink } from "@/components/workspace/copy-link";
-import { BookingList, Empty, Facts, HistoryList, Section, type Booking } from "@/components/workspace/detail-parts";
+import { ActivityList } from "@/components/workspace/activity-list";
+import { BookingList, Empty, Facts, Section, type Booking } from "@/components/workspace/detail-parts";
 import type { TabDef } from "@/components/workspace/tabs";
 import { CLIENT_STATUS_LABELS } from "@/lib/client-summary";
 import {
@@ -22,6 +23,7 @@ import { formatAuMobile } from "@/lib/phone";
 import { formatDate, formatDateTime } from "@/lib/time";
 import type { ClinicianDetail } from "./actions";
 import { IntakeCallForm } from "./intake-call-form";
+import { IntakeNotesForm } from "./intake-notes-form";
 
 /** Info first, then Documents (with a red count of anything out of date). */
 export function clinicianTabs(detail: ClinicianDetail | null): TabDef[] {
@@ -96,6 +98,10 @@ export function ClinicianInfo({
           )}
         </Section>
       )}
+
+      <Section title="Intake call notes">
+        <IntakeNotesForm key={c.screening_notes ?? ""} clinicianId={c.id} notes={c.screening_notes} />
+      </Section>
 
       <Section title="Contact">
         <Facts
@@ -240,10 +246,11 @@ export function ClinicianBookings({ detail }: { detail: ClinicianDetail }) {
   );
 }
 
+/** Everything that's happened: the record of their activity on Perch. */
 export function ClinicianHistory({ detail }: { detail: ClinicianDetail }) {
   return (
-    <Section title="Status changes">
-      <HistoryList history={detail.history} label={(s) => CLINICIAN_STATUS_LABELS[s as ClinicianStatus] ?? s} formatAt={formatDateTime} />
+    <Section title="Activity">
+      <ActivityList items={detail.activity} />
     </Section>
   );
 }

@@ -9,6 +9,7 @@ import { ONBOARDING_STAGES, isOutOfDate } from "@/lib/clinician-summary";
 import type { CredentialType, FamilyStatus } from "@/lib/domain";
 import { bookingUrl } from "@/lib/server/booking";
 import { clinicianUrl } from "@/lib/server/clinician-link";
+import { loadActivity, type ActivityEntry } from "@/lib/server/activity";
 import { createClient } from "@/lib/supabase/server";
 import { todayInAustralia } from "@/lib/time";
 import { firstOf, type ClinicianRow, type CredentialRow } from "@/lib/types";
@@ -40,7 +41,8 @@ export interface ClinicianDetail {
   applicationGaps: string[];
   goLiveGaps: string[];
   clients: { family_id: string; name: string; status: FamilyStatus }[];
-  history: { from_status: string | null; to_status: string; reason: string | null; by: string | null; at: string }[];
+  /** Every event and message, newest first (the History tab). */
+  activity: ActivityEntry[];
 }
 
 type One<T> = T | T[] | null;
@@ -54,7 +56,7 @@ export async function getClinicianDetail(id: string): Promise<{ ok: true; detail
   if (!clinician) return { ok: false, error: "This clinician couldn't be found." };
   await supabase.rpc("log_access", { p_entity_type: "clinicians", p_entity_id: id, p_action: "view" });
 
-  const [documents, applicationGaps, goLiveGaps, matches, history, people] = await Promise.all([
+  const [documents, applicationGaps, goLiveGaps, matches, people] = await Promise.all([
     supabase
       .from("credentials")
       .select("id, type, status, expires_at, number, file_path, sighted_only, created_at, verified_at")
@@ -68,7 +70,6 @@ export async function getClinicianDetail(id: string): Promise<{ ok: true; detail
       .select("id, family_id, state, families(status, children(first_name, last_name)), intro_calls(id, scheduled_at, outcome, reason), conversions(first_session_at)")
       .eq("clinician_id", id)
       .in("state", ["accepted", "withdrawn"]),
-    supabase.from("status_history").select("from_status, to_status, reason, by, at").eq("entity_type", "clinician").eq("entity_id", id).order("at", { ascending: false }),
     supabase.from("profiles").select("id, full_name"),
   ]);
   const { data: hours } = await supabase.from("availability").select("day_of_week, start_time, end_time").eq("clinician_id", id).order("day_of_week").order("start_time");
@@ -138,7 +139,7 @@ export async function getClinicianDetail(id: string): Promise<{ ok: true; detail
         const f = firstOf(m.families);
         return m.state === "accepted" && f ? [{ family_id: m.family_id, name: clientName(m), status: f.status }] : [];
       }),
-      history: (history.data ?? []).map((h: ClinicianDetail["history"][number]) => ({ ...h, by: h.by ? (names.get(h.by) ?? null) : null })),
+      activity: await loadActivity(supabase, "clinician", id, names),
     },
   };
 }

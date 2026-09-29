@@ -331,6 +331,66 @@ d("database", () => {
     });
   });
 
+  describe("activity log", () => {
+    type Ev = { kind: string; summary: string; actor_kind: string; actor_id: string | null; detail: Record<string, unknown> };
+    const events = (type: string, id: string) =>
+      db.q<Ev>(POSTGRES, "select kind, summary, actor_kind, actor_id, detail from public.activity_log where entity_type = $1 and entity_id = $2 order by id", [type, id]);
+    // Acting for a clinician or family, as the app's pages do (they send an x-perch-actor header; app.actor is the same thing)
+    const as = (actor: string, sql: string, params: unknown[] = []) =>
+      db.q(SERVICE, `with h as materialized (select set_config('app.actor', '${actor}', true)) ${sql.replace(/^select /, "select h.set_config, ")} from h`, params);
+
+    it("records a clinician's sign-up, booking, uploads, checks and status changes, and who did each", async () => {
+      const [{ id }] = await as("clinician", "select public.submit_application($1) as id", [
+        JSON.stringify({ name: "Lana Logged", email: "lana.logged@example.com", mobile: "+61400111555", profession: "speech_pathologist", experience_years: 3, suburb: "Carlton", postcode: "3053" }),
+      ]) as { id: string }[];
+      await as("clinician", "select public.book_appointment('clinician_intake', $1, now() + interval '4 days', 30, $2)", [id, coordinator]);
+      await as("clinician", "select public.record_clinician_upload($1, 'wwcc', '123', '2031-01-01', $2)", [id, `${id}/wwcc.pdf`]);
+      const [{ cred }] = await db.q<{ cred: string }>(POSTGRES, "select id as cred from public.credentials where clinician_id = $1", [id]);
+      await db.q(user(coordinator), "select public.verify_credential($1, false, 'Blurry photo')", [cred]);
+      await db.q(user(coordinator), "update public.clinicians set screening_notes = 'Great fit' where id = $1", [id]);
+
+      const log = await events("clinician", id);
+      const find = (kind: string) => log.find((e) => e.kind === kind);
+      expect(find("signed_up")?.actor_kind).toBe("clinician");
+      expect(find("call_booked")).toMatchObject({ actor_kind: "clinician" });
+      expect(find("call_booked")?.summary).toMatch(/^Intake call booked for .+ with Casey Coordinator$/);
+      expect(log.find((e) => e.kind === "status" && e.detail.to === "screening")).toMatchObject({ actor_kind: "clinician", detail: { from: "applied" } });
+      expect(find("document_uploaded")).toMatchObject({ actor_kind: "clinician", detail: { type: "wwcc" } });
+      expect(find("document_rejected")).toMatchObject({ actor_kind: "staff", actor_id: coordinator, detail: { reason: "Blurry photo" } });
+      expect(find("notes_updated")).toMatchObject({ actor_kind: "staff", actor_id: coordinator });
+    });
+
+    it("records referrals on both the family's and the clinician's record", async () => {
+      const a = await db.createActiveClinician({ name: "Logged Lee" });
+      const familyId = await db.submitEnquiry();
+      await db.q(POSTGRES, "update public.families set status = 'intake_done' where id = $1", [familyId]);
+      await db.q(POSTGRES, "update public.families set status = 'ready_to_match' where id = $1", [familyId]);
+      const [{ match }] = await db.q<{ match: string }>(user(coordinator), "select public.allocate_clinician($1, $2) as match", [familyId, a.clinicianId]);
+      await as("clinician", "select public.respond_to_referral($1, true)", [match]);
+
+      const family = await events("family", familyId);
+      expect(family.map((e) => e.kind)).toEqual(expect.arrayContaining(["enquiry", "consent", "referral_offered", "referral_accepted"]));
+      expect(family.find((e) => e.kind === "referral_offered")).toMatchObject({ actor_kind: "staff", actor_id: coordinator });
+      expect(family.find((e) => e.kind === "referral_accepted")).toMatchObject({ actor_kind: "clinician", summary: "Logged Lee accepted the referral" });
+      // family summaries stay free of the family's personal details
+      expect(family.map((e) => e.summary).join(" ")).not.toMatch(/Sam Parent|parent-/);
+
+      const clinician = await events("clinician", a.clinicianId);
+      expect(clinician.map((e) => e.kind)).toEqual(expect.arrayContaining(["referral_offered", "referral_accepted"]));
+    });
+
+    it("can't be changed or deleted, and only staff can read it", async () => {
+      const familyId = await db.submitEnquiry();
+      await expect(db.q(POSTGRES, "update public.activity_log set summary = 'x' where entity_id = $1", [familyId])).rejects.toThrow(/can't be changed/);
+      await expect(db.q(POSTGRES, "delete from public.activity_log where entity_id = $1", [familyId])).rejects.toThrow(/can't be changed/);
+      await expect(db.q(SERVICE, "insert into public.activity_log (entity_type, entity_id, kind, summary, actor_kind) values ('family', $1, 'x', 'x', 'system')", [familyId])).rejects.toThrow(/permission denied/);
+      expect(await db.q(user(coordinator), "select 1 from public.activity_log where entity_id = $1", [familyId])).not.toHaveLength(0);
+      const { userId } = await db.createActiveClinician();
+      expect(await db.q(user(userId), "select 1 from public.activity_log where entity_id = $1", [familyId])).toHaveLength(0);
+      await expect(db.q(ANON, "select 1 from public.activity_log")).rejects.toThrow(/permission denied/);
+    });
+  });
+
   describe("clinician sign-up", () => {
     it("goes from sign-up to application, intake call and ready", async () => {
       const { id } = await db.one<{ id: string }>(SERVICE, "select public.submit_application($1) as id", [
@@ -390,8 +450,6 @@ d("database", () => {
         `select public.submit_application($1) as id`,
         [JSON.stringify({ name: "New Person", email: "new.person@example.com", mobile: "+61400111222", profession: "occupational_therapist", experience_years: 3, suburb: "Ryde", postcode: "2112" })],
       );
-      await db.q(user(coordinator), "select public.set_clinician_status($1, 'documents_requested')", [id]);
-      await db.q(POSTGRES, "update public.clinicians set status = 'documents_verified' where id = $1", [id]).catch(() => undefined);
       const gaps = await db.one<{ gaps: string[] }>(user(coordinator), "select public.clinician_go_live_gaps($1) as gaps", [id]);
       expect(gaps.gaps).toEqual(
         expect.arrayContaining(["credential:ahpra", "credential:wwcc", "agreement", "clinical_lead_approval", "availability"]),

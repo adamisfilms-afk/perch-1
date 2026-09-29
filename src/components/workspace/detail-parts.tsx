@@ -69,32 +69,3 @@ export function BookingList({ bookings, now, formatAt }: { bookings: Booking[]; 
     </div>
   );
 }
-
-export interface HistoryEntry {
-  from_status: string | null;
-  to_status: string;
-  reason: string | null;
-  by: string | null;
-  at: string;
-}
-
-export function HistoryList({ history, label, formatAt }: { history: HistoryEntry[]; label: (status: string) => string; formatAt: (iso: string) => string }) {
-  if (!history.length) return <Empty>No changes yet.</Empty>;
-  return (
-    <ol className="space-y-2 border-l border-neutral-200 pl-4 text-sm">
-      {history.map((h, n) => (
-        <li key={n}>
-          <p className="text-neutral-900">
-            {h.from_status ? `${label(h.from_status)} → ` : ""}
-            {label(h.to_status)}
-          </p>
-          <p className="text-neutral-500">
-            {formatAt(h.at)}
-            {h.by ? ` · ${h.by}` : " · Automatic"}
-            {h.reason && ` · ${h.reason}`}
-          </p>
-        </li>
-      ))}
-    </ol>
-  );
-}

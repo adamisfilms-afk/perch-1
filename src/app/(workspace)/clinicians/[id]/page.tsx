@@ -9,24 +9,24 @@ import { requireStaff } from "@/lib/auth";
 import { outOfDateCount, stageOf } from "@/lib/clinician-summary";
 import {
   AGE_GROUP_LABELS,
-  CLINICIAN_STATUS_LABELS,
-  CLINICIAN_TRANSITIONS,
   CREDENTIAL_TYPES,
   CREDENTIALS,
   DAY_LABELS,
   FUNDING_LABELS,
   INTEREST_LABELS,
   PROFESSION_LABELS,
+  clinicianMoves,
   goLiveGapLabel,
   requiredCredentialTypes,
   type AgeGroup,
-  type ClinicianStatus,
   type CredentialType,
 } from "@/lib/domain";
 import { formatAuMobile } from "@/lib/phone";
+import { RecentActivity } from "@/components/workspace/recent-activity";
+import { loadActivity } from "@/lib/server/activity";
 import { createClient } from "@/lib/supabase/server";
 import { todayInAustralia } from "@/lib/time";
-import { firstOf, type AvailabilityRow, type ClinicianRow, type CredentialRow, type StatusHistoryRow } from "@/lib/types";
+import { firstOf, type AvailabilityRow, type ClinicianRow, type CredentialRow } from "@/lib/types";
 import { getClinicianDetail } from "../actions";
 import { ClinicianBookings, ClinicianDocuments, ClinicianHistory, clinicianTabs } from "../clinician-detail";
 import { StagePill } from "../clinician-table";
@@ -87,14 +87,13 @@ export default async function ClinicianPage({ params, searchParams }: PageProps<
   if (!clinician) notFound();
   await supabase.rpc("log_access", { p_entity_type: "clinicians", p_entity_id: id, p_action: "view" });
 
-  const [{ data: allocated }, { data: creds }, { data: slots }, { data: agreements }, { data: gaps }, { data: history }, { data: matches }, { data: offboarding }, { data: people }] =
+  const [{ data: allocated }, { data: creds }, { data: slots }, { data: agreements }, { data: gaps }, { data: matches }, { data: offboarding }, { data: people }] =
     await Promise.all([
       supabase.from("matches").select("families(status)").eq("clinician_id", id).eq("state", "accepted"),
       supabase.from("credentials").select("*").eq("clinician_id", id).order("created_at", { ascending: false }),
       supabase.from("availability").select("*").eq("clinician_id", id).order("day_of_week").order("start_time"),
       supabase.from("agreements").select("*").eq("clinician_id", id).order("created_at", { ascending: false }),
       supabase.rpc("clinician_go_live_gaps", { p_clinician: id }),
-      supabase.from("status_history").select("*").eq("entity_type", "clinician").eq("entity_id", id).order("at", { ascending: false }),
       supabase.from("matches").select("id, state, family_id, offered_at, responded_at, children(first_name)").eq("clinician_id", id).not("offered_at", "is", null).order("offered_at", { ascending: false }).limit(20),
       supabase.from("offboarding_checklists").select("*").eq("clinician_id", id).maybeSingle(),
       supabase.from("profiles").select("id, full_name"),
@@ -108,9 +107,8 @@ export default async function ClinicianPage({ params, searchParams }: PageProps<
   const pending = credentials.filter((c) => c.status === "pending");
   const goLiveGaps = (gaps ?? []) as string[];
   const names = new Map((people ?? []).map((p: { id: string; full_name: string }) => [p.id, p.full_name]));
-  const statusOptions = (viewer.role === "admin" ? (Object.keys(CLINICIAN_STATUS_LABELS) as ClinicianStatus[]) : CLINICIAN_TRANSITIONS[clinician.status]).filter(
-    (s) => s !== clinician.status,
-  );
+  const activity = await loadActivity(supabase, "clinician", id, names);
+  const statusOptions = clinicianMoves(clinician, ["admin", "clinical_lead"].includes(viewer.role));
   const openAgreement = agreements?.find((a: { signed_at: string | null }) => !a.signed_at);
   const signedAgreement = agreements?.find((a: { signed_at: string | null }) => a.signed_at) as { version: string; signed_at: string } | undefined;
   const sightedTypes: CredentialType[] = ["drivers_licence", "car_insurance"];
@@ -364,18 +362,10 @@ export default async function ClinicianPage({ params, searchParams }: PageProps<
           </Card>
 
           <Card>
-            <CardTitle>History</CardTitle>
-            <ol className="space-y-2 text-sm">
-              {((history ?? []) as StatusHistoryRow[]).map((h) => (
-                <li key={h.id}>
-                  <span className="font-medium">{h.to_status.replaceAll("_", " ")}</span>
-                  <span className="block text-xs text-stone-500">
-                    <When at={h.at} /> · {h.by ? names.get(h.by) ?? "Staff" : "Automatic"}
-                    {h.reason && ` · ${h.reason}`}
-                  </span>
-                </li>
-              ))}
-            </ol>
+            <CardTitle action={<Link href={`/clinicians/${id}?tab=history`} className="text-sm text-stone-600 underline underline-offset-4">Full history</Link>}>
+              Recent activity
+            </CardTitle>
+            <RecentActivity items={activity.filter((a) => a.source === "event").slice(0, 8)} />
           </Card>
         </div>
       </div>

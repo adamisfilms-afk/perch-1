@@ -27,7 +27,7 @@ export async function respond(token: string, _prev: ActionState, fd: FormData): 
   const link = await resolveReferralLink(token);
   if (!link) return { error: EXPIRED };
   const accept = fd.get("decision") === "accept";
-  const { error } = await createAdminClient().rpc("respond_to_referral", { p_match: link.matchId, p_accept: accept, p_reason: text(fd, "reason") });
+  const { error } = await createAdminClient("clinician").rpc("respond_to_referral", { p_match: link.matchId, p_accept: accept, p_reason: text(fd, "reason") });
   if (error) return { error: friendlyError(error) };
   return done(
     token,
@@ -42,7 +42,7 @@ export async function recordIntro(token: string, _prev: ActionState, fd: FormDat
   if (!link) return { error: EXPIRED };
   const outcome = fd.get("outcome");
   if (outcome !== "going_ahead" && outcome !== "not_going_ahead") return { error: "Choose how the intro call went" };
-  const { error } = await createAdminClient().rpc("record_intro_outcome", { p_match: link.matchId, p_outcome: outcome, p_reason: text(fd, "reason") });
+  const { error } = await createAdminClient("clinician").rpc("record_intro_outcome", { p_match: link.matchId, p_outcome: outcome, p_reason: text(fd, "reason") });
   if (error) return { error: friendlyError(error) };
   return done(
     token,
@@ -53,7 +53,7 @@ export async function recordIntro(token: string, _prev: ActionState, fd: FormDat
 export async function confirmFirstSession(token: string, _prev: ActionState, fd: FormData): Promise<ActionState> {
   const link = await resolveReferralLink(token);
   if (!link) return { error: EXPIRED };
-  const { error } = await createAdminClient().rpc("confirm_first_session", { p_match: link.matchId, p_date: text(fd, "date") });
+  const { error } = await createAdminClient("clinician").rpc("confirm_first_session", { p_match: link.matchId, p_date: text(fd, "date") });
   if (error) return { error: friendlyError(error) };
   return done(token, "Great, first session confirmed. From here the family is managed in your Halaxy.");
 }
