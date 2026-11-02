@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "../ui";
-import { CalendarIcon, FolderIcon, GridIcon, PersonIcon } from "./icons";
+import { CalendarIcon, FlowIcon, FolderIcon, GridIcon, PersonIcon } from "./icons";
 
 const LINKS = [
   // A client's full record lives at /families/[id].
@@ -12,6 +13,9 @@ const LINKS = [
   { href: "/calls", label: "Calls", icon: CalendarIcon, also: null },
   { href: "/dashboard", label: "Dashboards", icon: GridIcon, also: null },
 ];
+
+// Pinned to the bottom of the sidebar (and last in the mobile bar).
+const OVERVIEW = { href: "/overview", label: "Overview", icon: FlowIcon, also: null };
 
 export function Sidebar({ name, role }: { name: string; role: string }) {
   const pathname = usePathname();
@@ -25,27 +29,20 @@ export function Sidebar({ name, role }: { name: string; role: string }) {
       </div>
       <nav aria-label="Main" className="overflow-x-auto px-3 md:px-6">
         <ul className="flex gap-1 md:flex-col md:gap-0.5">
-          {LINKS.map(({ href, label, icon: Icon, also }) => {
-            const active = pathname === href || pathname.startsWith(`${href}/`) || (!!also && pathname.startsWith(also));
-            return (
-              <li key={href}>
-                <Link
-                  href={href}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "flex min-h-8 items-center gap-2.5 whitespace-nowrap rounded-md px-3 text-sm",
-                    active ? "bg-neutral-200/80 text-neutral-900" : "text-neutral-700 hover:bg-neutral-200/50 hover:text-neutral-900",
-                  )}
-                >
-                  <Icon className="size-3.5 text-neutral-500" />
-                  {label}
-                </Link>
-              </li>
-            );
-          })}
+          {LINKS.map((link) => (
+            <li key={link.href}>
+              <NavLink link={link} pathname={pathname} />
+            </li>
+          ))}
+          <li className="md:hidden">
+            <NavLink link={OVERVIEW} pathname={pathname} />
+          </li>
         </ul>
       </nav>
-      <div className="mt-auto hidden border-t border-neutral-200 px-7 py-5 text-sm md:block">
+      <nav aria-label="Help" className="mt-auto hidden px-6 pb-3 md:block">
+        <NavLink link={OVERVIEW} pathname={pathname} />
+      </nav>
+      <div className="hidden border-t border-neutral-200 px-7 py-5 text-sm md:block">
         <p className="font-medium text-neutral-800">{name}</p>
         <p className="text-neutral-500">{role}</p>
         <form action="/auth/signout" method="post" className="mt-2">
@@ -55,5 +52,25 @@ export function Sidebar({ name, role }: { name: string; role: string }) {
         </form>
       </div>
     </aside>
+  );
+}
+
+type NavItem = { href: string; label: string; icon: (props: { className?: string }) => ReactNode; also: string | null };
+
+function NavLink({ link, pathname }: { link: NavItem; pathname: string }) {
+  const { href, label, icon: Icon, also } = link;
+  const active = pathname === href || pathname.startsWith(`${href}/`) || (!!also && pathname.startsWith(also));
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex min-h-8 items-center gap-2.5 whitespace-nowrap rounded-md px-3 text-sm",
+        active ? "bg-neutral-200/80 text-neutral-900" : "text-neutral-700 hover:bg-neutral-200/50 hover:text-neutral-900",
+      )}
+    >
+      <Icon className="size-3.5 text-neutral-500" />
+      {label}
+    </Link>
   );
 }

@@ -41,6 +41,17 @@ export function CalendarIcon(props: IconProps) {
   );
 }
 
+export function FlowIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="6" cy="6" r="2.5" />
+      <circle cx="18" cy="12" r="2.5" />
+      <circle cx="6" cy="18" r="2.5" />
+      <path d="M8.5 6h3.5a3 3 0 0 1 3 3v.5M8.5 18h3.5a3 3 0 0 0 3-3v-.5" />
+    </svg>
+  );
+}
+
 export function SearchIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>
