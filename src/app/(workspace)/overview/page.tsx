@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { BoltIcon, CalendarIcon, PhoneIcon } from "@/components/workspace/icons";
 import { PageTabsHeader } from "@/components/workspace/summary-parts";
 import { requireStaff } from "@/lib/auth";
 
@@ -6,10 +7,20 @@ export const metadata = { title: "Overview" };
 
 type Who = "Family" | "Clinician" | "Staff" | "Automatic";
 
+/** How a step happens: automatically, by booking a time on a calendar, or by a phone call. */
+type Kind = "automated" | "booking" | "call";
+
+const KINDS: Record<Kind, { label: string; icon: typeof BoltIcon; className: string }> = {
+  automated: { label: "Automated", icon: BoltIcon, className: "text-amber-600" },
+  booking: { label: "Calendar booking", icon: CalendarIcon, className: "text-sky-700" },
+  call: { label: "Phone call", icon: PhoneIcon, className: "text-emerald-700" },
+};
+
 interface Step {
   title: string;
   body: ReactNode;
   who: Who[];
+  kinds?: Kind[];
   /** The step as it shows in Switchboard, if it has one. */
   shows?: string;
   /** What happens if this step doesn't go ahead. */
@@ -19,6 +30,7 @@ interface Step {
 const CLIENT_STEPS: Step[] = [
   {
     title: "Enquiry",
+    kinds: ["automated"],
     who: ["Family"],
     shows: "New",
     body: (
@@ -30,6 +42,7 @@ const CLIENT_STEPS: Step[] = [
   },
   {
     title: "Sign-up call booked",
+    kinds: ["booking", "automated"],
     who: ["Family"],
     shows: "Intake call booked",
     body: (
@@ -41,6 +54,7 @@ const CLIENT_STEPS: Step[] = [
   },
   {
     title: "Sign-up call",
+    kinds: ["call"],
     who: ["Staff"],
     shows: "Ready to match",
     body: <>A coordinator calls the family and fills in the intake script on the client&apos;s full record.</>,
@@ -48,6 +62,7 @@ const CLIENT_STEPS: Step[] = [
   },
   {
     title: "Clinician offered",
+    kinds: ["automated"],
     who: ["Staff", "Clinician"],
     shows: "Offered to clinician",
     body: (
@@ -63,6 +78,7 @@ const CLIENT_STEPS: Step[] = [
   },
   {
     title: "Matched",
+    kinds: ["automated"],
     who: ["Clinician", "Automatic"],
     shows: "Matched",
     body: (
@@ -74,12 +90,14 @@ const CLIENT_STEPS: Step[] = [
   },
   {
     title: "Intro call booked",
+    kinds: ["booking", "automated"],
     who: ["Family"],
     shows: "Intro booked",
     body: <>The family chooses a 15-minute time. The clinician is emailed who to call and when, and both get a text reminder the day before.</>,
   },
   {
     title: "Intro call",
+    kinds: ["call"],
     who: ["Clinician"],
     shows: "Intro done",
     body: <>Afterwards, the clinician records how it went from the referral link in their email.</>,
@@ -87,6 +105,7 @@ const CLIENT_STEPS: Step[] = [
   },
   {
     title: "First session",
+    kinds: ["automated"],
     who: ["Clinician", "Automatic"],
     shows: "Active",
     body: (
@@ -101,6 +120,7 @@ const CLIENT_STEPS: Step[] = [
 const CLINICIAN_STEPS: Step[] = [
   {
     title: "Sign up",
+    kinds: ["automated"],
     who: ["Clinician"],
     shows: "New",
     body: (
@@ -112,6 +132,7 @@ const CLINICIAN_STEPS: Step[] = [
   },
   {
     title: "Intake call booked",
+    kinds: ["booking", "automated"],
     who: ["Clinician"],
     shows: "Intake call booked",
     body: (
@@ -133,6 +154,7 @@ const CLINICIAN_STEPS: Step[] = [
   },
   {
     title: "Submit application",
+    kinds: ["automated"],
     who: ["Clinician"],
     shows: "Application complete",
     body: <>Once everything&apos;s in, they accept the service agreement and submit. Staff are told by email and Slack.</>,
@@ -150,6 +172,7 @@ const CLINICIAN_STEPS: Step[] = [
   },
   {
     title: "Intake call recorded",
+    kinds: ["call"],
     who: ["Staff"],
     shows: "Ready",
     body: (
@@ -161,6 +184,7 @@ const CLINICIAN_STEPS: Step[] = [
   },
   {
     title: "Referrals",
+    kinds: ["automated"],
     who: ["Staff", "Clinician"],
     body: (
       <>
@@ -171,6 +195,7 @@ const CLINICIAN_STEPS: Step[] = [
   },
   {
     title: "Active",
+    kinds: ["automated"],
     who: ["Automatic"],
     shows: "Active",
     body: (
@@ -204,12 +229,23 @@ export default async function OverviewPage({ searchParams }: PageProps<"/overvie
         ]}
       />
       <div className="max-w-3xl px-4 py-6 md:px-8">
-        <p className="mb-8 text-sm text-neutral-600">
+        <p className="mb-4 text-sm text-neutral-600">
           {clinicians
             ? "How a clinician goes from signing up to seeing clients. Every step is recorded in their History."
             : "How a family goes from their first enquiry to their first session. Every step is recorded in their History."}{" "}
           Grey labels show the step as it appears in Switchboard.
         </p>
+        <ul className="mb-8 flex flex-wrap gap-x-5 gap-y-2 text-sm text-neutral-600" aria-label="Key">
+          {(Object.keys(KINDS) as Kind[]).map((k) => {
+            const { label, icon: Icon, className } = KINDS[k];
+            return (
+              <li key={k} className="flex items-center gap-1.5">
+                <Icon className={`size-4 ${className}`} />
+                {label}
+              </li>
+            );
+          })}
+        </ul>
         <Flow steps={clinicians ? CLINICIAN_STEPS : CLIENT_STEPS} />
       </div>
     </div>
@@ -237,6 +273,19 @@ function Flow({ steps }: { steps: Step[] }) {
                   <span className="sr-only">Step {i + 1}: </span>
                   {s.title}
                 </h3>
+                {s.kinds && (
+                  <span className="flex items-center gap-1.5">
+                    {s.kinds.map((k) => {
+                      const { label, icon: Icon, className } = KINDS[k];
+                      return (
+                        <span key={k} title={label} className="inline-flex">
+                          <Icon className={`size-4 ${className}`} />
+                          <span className="sr-only">{label}</span>
+                        </span>
+                      );
+                    })}
+                  </span>
+                )}
                 {s.shows && <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-500">{s.shows}</span>}
               </div>
               <p className="mt-1 text-sm leading-relaxed text-neutral-700">{s.body}</p>
