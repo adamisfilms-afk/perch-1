@@ -21,7 +21,7 @@ interface Step {
   body: ReactNode;
   who: Who[];
   kinds?: Kind[];
-  /** The step as it shows in Switchboard, if it has one. */
+  /** The status in Switchboard once this step is done, if it changes. */
   shows?: string;
   /** What happens if this step doesn't go ahead. */
   otherwise?: { title: string; body: ReactNode };
@@ -156,7 +156,7 @@ const CLINICIAN_STEPS: Step[] = [
     title: "Submit application",
     kinds: ["automated"],
     who: ["Clinician"],
-    shows: "Application complete",
+    shows: "Application complete (or Intake call booked, if they've booked it)",
     body: <>Once everything&apos;s in, they accept the service agreement and submit. Staff are told by email and Slack.</>,
   },
   {
@@ -233,7 +233,7 @@ export default async function OverviewPage({ searchParams }: PageProps<"/overvie
           {clinicians
             ? "How a clinician goes from signing up to seeing clients. Every step is recorded in their History."
             : "How a family goes from their first enquiry to their first session. Every step is recorded in their History."}{" "}
-          Grey labels show the step as it appears in Switchboard.
+          Each step shows who acts and how it happens, and the status in Switchboard once it&apos;s done.
         </p>
         <ul className="mb-8 flex flex-wrap gap-x-5 gap-y-2 text-sm text-neutral-600" aria-label="Key">
           {(Object.keys(KINDS) as Kind[]).map((k) => {
@@ -273,6 +273,13 @@ function Flow({ steps }: { steps: Step[] }) {
                   <span className="sr-only">Step {i + 1}: </span>
                   {s.title}
                 </h3>
+                <span className="flex flex-wrap gap-1.5">
+                  {s.who.map((w) => (
+                    <span key={w} className={`rounded px-1.5 py-0.5 text-xs ${WHO_STYLE[w]}`}>
+                      {w}
+                    </span>
+                  ))}
+                </span>
                 {s.kinds && (
                   <span className="flex items-center gap-1.5">
                     {s.kinds.map((k) => {
@@ -286,15 +293,15 @@ function Flow({ steps }: { steps: Step[] }) {
                     })}
                   </span>
                 )}
-                {s.shows && <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-500">{s.shows}</span>}
               </div>
               <p className="mt-1 text-sm leading-relaxed text-neutral-700">{s.body}</p>
-              <p className="mt-2 flex flex-wrap gap-1.5">
-                {s.who.map((w) => (
-                  <span key={w} className={`rounded px-1.5 py-0.5 text-xs ${WHO_STYLE[w]}`}>
-                    {w}
-                  </span>
-                ))}
+              <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-neutral-500">
+                Status after this step:
+                {s.shows ? (
+                  <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-neutral-700">{s.shows}</span>
+                ) : (
+                  <span>no change</span>
+                )}
               </p>
               {s.otherwise && (
                 <div className="mt-3 rounded-md border-l-2 border-amber-400 bg-amber-50/60 px-3 py-2 text-sm">
