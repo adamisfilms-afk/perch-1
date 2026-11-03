@@ -57,3 +57,23 @@ export async function confirmFirstSession(token: string, _prev: ActionState, fd:
   if (error) return { error: friendlyError(error) };
   return done(token, "Great, first session confirmed. From here the family is managed in your Halaxy.");
 }
+
+export async function logSession(token: string, _prev: ActionState, fd: FormData): Promise<ActionState> {
+  const link = await resolveReferralLink(token);
+  if (!link) return { error: EXPIRED };
+  const { error } = await createAdminClient("clinician").rpc("log_session", {
+    p_match: link.matchId,
+    p_date: text(fd, "date"),
+    p_service_type: text(fd, "service_type"),
+  });
+  if (error) return { error: friendlyError(error) };
+  return done(token, "Session logged");
+}
+
+export async function voidSession(token: string, sessionId: string, reason: string): Promise<ActionState> {
+  const link = await resolveReferralLink(token);
+  if (!link) return { error: EXPIRED };
+  const { error } = await createAdminClient("clinician").rpc("void_session", { p_session: sessionId, p_reason: reason, p_clinician: link.clinicianId });
+  if (error) return { error: friendlyError(error) };
+  return done(token, "Session removed");
+}

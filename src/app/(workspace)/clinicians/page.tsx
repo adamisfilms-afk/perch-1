@@ -1,4 +1,4 @@
-import { HeaderButton, SummaryHeader, SummaryKpiBand } from "@/components/workspace/summary-parts";
+import { SummaryHeader, SummaryKpiBand } from "@/components/workspace/summary-parts";
 import { TargetsButton } from "@/components/workspace/targets-modal";
 import { requireStaff } from "@/lib/auth";
 import { computeKpis } from "@/lib/client-summary";
@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { firstOf } from "@/lib/types";
 import { saveClinicianTargets } from "./actions";
 import { ClinicianTable } from "./clinician-table";
+import { NewClinicianButton } from "./new-clinician";
 
 export const metadata = { title: "Clinician summary" };
 
@@ -72,7 +73,7 @@ export default async function CliniciansPage() {
         countTitle="Clinicians still moving through onboarding"
         actions={
           <>
-            <HeaderButton href="/join">New clinician</HeaderButton>
+            <NewClinicianButton />
             <TargetsButton
               title="Clinician summary settings"
               stepHelp="Hours a clinician can wait in an onboarding step before it shows in red in the Elapsed column. Leave blank for no target."

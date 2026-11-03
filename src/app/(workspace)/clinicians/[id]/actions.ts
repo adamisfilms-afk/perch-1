@@ -225,3 +225,21 @@ export async function sendClinicianLink(clinicianId: string, reset: boolean): Pr
   if (error) return { error: friendlyError(error) };
   return done(clinicianId, reset ? "Signed out everywhere and old links cancelled. A new link has been emailed." : "Their link has been emailed");
 }
+
+/** Admins only: delete the clinician, their documents (and stored files) and their old login, if any. */
+export async function deleteClinician(clinicianId: string): Promise<ActionState> {
+  await requireStaff(["admin"]);
+  const supabase = await createClient();
+  const { data: clinician } = await supabase.from("clinicians").select("user_id").eq("id", clinicianId).maybeSingle<{ user_id: string | null }>();
+  const { data: files, error } = await supabase.rpc("delete_clinician", { p_clinician: clinicianId });
+  if (error) return { error: friendlyError(error) };
+  const admin = createAdminClient();
+  const paths = ((files as string[] | null) ?? []).filter(Boolean);
+  if (paths.length) {
+    const { error: storageError } = await admin.storage.from("credentials").remove(paths);
+    if (storageError) console.error("Couldn't remove a deleted clinician's files", storageError.message);
+  }
+  if (clinician?.user_id) await admin.auth.admin.deleteUser(clinician.user_id).catch(() => undefined);
+  revalidatePath("/clinicians");
+  redirect("/clinicians");
+}

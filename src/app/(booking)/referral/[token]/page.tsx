@@ -2,9 +2,12 @@ import type { ReactNode } from "react";
 import { FirstSessionForm, IntroOutcomeForm } from "@/components/referral-forms";
 import { CONCERN_LABELS, FUNDING_LABELS, SERVICE_LABELS, TIME_BLOCK_LABELS, type Concern } from "@/lib/domain";
 import { loadReferral, resolveReferralLink, type ReferralView } from "@/lib/server/clinician-link";
-import { formatDate, formatDateTime } from "@/lib/time";
+import { SessionLog } from "@/components/session-log";
+import { loadServiceTypes, loadSessions } from "@/lib/server/sessions";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { formatDate, formatDateTime, todayInAustralia } from "@/lib/time";
 import { LinkExpired } from "../../link-expired";
-import { confirmFirstSession, recordIntro, respond } from "./actions";
+import { confirmFirstSession, logSession, recordIntro, respond, voidSession } from "./actions";
 import { RespondForm } from "./respond-form";
 
 export const metadata = { title: "Referral", robots: { index: false, follow: false } };
@@ -91,29 +94,41 @@ function Summary({ view }: { view: ReferralView }) {
   );
 }
 
-function Accepted({ view, token }: { view: ReferralView; token: string }) {
-  if (view.firstSessionAt) {
-    return (
-      <p className="rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-        First session confirmed for {formatDate(view.firstSessionAt)}. Thanks! From here the family is managed in your Halaxy.
-      </p>
-    );
-  }
+async function Accepted({ view, token }: { view: ReferralView; token: string }) {
+  const db = createAdminClient("clinician");
+  const [types, sessions] = await Promise.all([loadServiceTypes(db), loadSessions(db, "match_id", view.matchId)]);
   return (
     <div className="space-y-8">
-      <p className="rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-        You accepted this referral. The family&apos;s details are in the email we sent you.
-        {view.introAt ? ` Their intro call is booked for ${formatDateTime(view.introAt)}.` : " We'll email you when they book their intro call."}
-      </p>
-      {!view.introOutcome && (
+      {view.firstSessionAt ? (
+        <p className="rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          First session: {formatDate(view.firstSessionAt)}. Please log every session below on the day: it&apos;s how sessions are counted and paid.
+        </p>
+      ) : (
+        <p className="rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          You accepted this referral. The family&apos;s details are in the email we sent you.
+          {view.introAt ? ` Their intro call is booked for ${formatDateTime(view.introAt)}.` : " We'll email you when they book their intro call."}
+        </p>
+      )}
+      {!view.introOutcome && !view.firstSessionAt && (
         <section>
           <h2 className={heading}>After the intro call</h2>
           <IntroOutcomeForm action={recordIntro.bind(null, token)} />
         </section>
       )}
+      {!view.firstSessionAt && (
+        <section>
+          <h2 className={heading}>First session booked?</h2>
+          <p className="mb-3 text-sm text-neutral-600">Tell us the date once it&apos;s booked. Logging the first session below does this too.</p>
+          <FirstSessionForm action={confirmFirstSession.bind(null, token)} />
+        </section>
+      )}
       <section>
-        <h2 className={heading}>First session</h2>
-        <FirstSessionForm action={confirmFirstSession.bind(null, token)} />
+        <h2 className={heading}>Sessions</h2>
+        <p className="mb-4 text-sm text-neutral-600">
+          Log each session once it&apos;s happened. Keep arranging times with the family as you normally would. Each month we ask the family to confirm the
+          count.
+        </p>
+        <SessionLog types={types} sessions={sessions} logAction={logSession.bind(null, token)} voidAction={voidSession.bind(null, token)} today={todayInAustralia()} />
       </section>
     </div>
   );

@@ -2,6 +2,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { CopyLink } from "@/components/workspace/copy-link";
+import { SessionLog } from "@/components/session-log";
 import { ActivityList } from "@/components/workspace/activity-list";
 import { BookingList, Empty, Facts, Section, type Booking } from "@/components/workspace/detail-parts";
 import type { TabDef } from "@/components/workspace/tabs";
@@ -242,6 +243,13 @@ export function ClinicianBookings({ detail }: { detail: ClinicianDetail }) {
         </Section>
       )}
       <BookingList bookings={detail.bookings} now={detail.loadedAt} formatAt={bookingTime} />
+      <Section title="Sessions">
+        {detail.sessions.length === 0 ? (
+          <Empty>No sessions logged yet.</Empty>
+        ) : (
+          <SessionLog types={detail.serviceTypes} sessions={detail.sessions} today={detail.today} showClient />
+        )}
+      </Section>
     </div>
   );
 }

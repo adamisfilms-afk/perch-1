@@ -18,6 +18,7 @@ import {
 } from "@/lib/domain";
 import { AllocateClinician } from "@/components/workspace/allocate-clinician";
 import { formatAuMobile } from "@/lib/phone";
+import { DangerZone } from "@/components/workspace/danger-zone";
 import { RecentActivity } from "@/components/workspace/recent-activity";
 import { loadActivity } from "@/lib/server/activity";
 import { createClient } from "@/lib/supabase/server";
@@ -304,6 +305,16 @@ export default async function FamilyPage({ params, searchParams }: PageProps<"/f
             </ul>
           </Card>
         </div>
+      </div>
+      <div className="max-w-4xl pt-4">
+        <DangerZone
+          title="Delete this client"
+          description="Permanently deletes the family, their children, consents, calls, referrals and bookings, and the messages we sent them. The activity log keeps a note that they were deleted. Clients with sessions logged can't be deleted."
+          buttonLabel="Delete client"
+          confirmName={family.parent_name}
+          action={actions.deleteClient.bind(null, family.id)}
+          allowed={viewer.role === "admin"}
+        />
       </div>
       </div>
     </div>

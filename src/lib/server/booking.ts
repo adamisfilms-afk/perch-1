@@ -4,7 +4,7 @@ import "server-only";
 // the free times, and makes, moves or cancels the booking through the database functions.
 // Runs with the service role because nobody is signed in; it only reads what the page needs.
 
-import { bookingPath, linkSecret, readLinkToken, type BookingLinkKind } from "../booking/links";
+import { bookingPath, linkSecret, readLinkToken, type BookingLinkKind, type LinkKind } from "../booking/links";
 import { CALL_LABELS, minutesFor, parseBookingSettings, type AppointmentKind, type BookingSettings } from "../booking/settings";
 import { availableSlots, pickHost, type HostSchedule, type Slot } from "../booking/slots";
 import { env } from "../env";
@@ -95,10 +95,10 @@ async function teamHosts(db: Db, flag: "hosts_signup_calls" | "hosts_clinician_c
 /** Everything the booking page needs, or null if the link isn't valid. */
 export async function resolveBooking(token: string): Promise<BookingView | null> {
   const ref = readLinkToken(linkSecret(), token);
-  if (!ref || ref.kind === "clinician" || ref.kind === "referral") return null;
+  if (!ref || !(["signup_call", "clinician_intake", "intro_call"] as LinkKind[]).includes(ref.kind)) return null;
+  const kind = ref.kind as BookingLinkKind;
   const db = createAdminClient();
   const settings = await loadSettings(db);
-  const kind = ref.kind;
   const minutes = minutesFor(kind, settings);
   const opts = { minutes, now: Date.now(), minNoticeHours: settings.min_notice_hours, horizonDays: settings.horizon_days };
 

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import type { ActionState } from "@/components/forms";
 import type { Booking } from "@/components/workspace/detail-parts";
 import { friendlyError, requireStaff } from "@/lib/auth";
@@ -10,7 +11,12 @@ import type { CredentialType, FamilyStatus } from "@/lib/domain";
 import { bookingUrl } from "@/lib/server/booking";
 import { clinicianUrl } from "@/lib/server/clinician-link";
 import { loadActivity, type ActivityEntry } from "@/lib/server/activity";
+import { loadServiceTypes, loadSessions, type ServiceType, type SessionEntry } from "@/lib/server/sessions";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { applicationSchema, fieldErrors, formDataToObject } from "@/lib/validation";
+import { geocodeSuburb } from "@/lib/geo";
+import { drainOutboxQuietly } from "@/lib/notifications/outbox";
 import { todayInAustralia } from "@/lib/time";
 import { firstOf, type ClinicianRow, type CredentialRow } from "@/lib/types";
 
@@ -43,6 +49,10 @@ export interface ClinicianDetail {
   clients: { family_id: string; name: string; status: FamilyStatus }[];
   /** Every event and message, newest first (the History tab). */
   activity: ActivityEntry[];
+  /** Sessions logged with all their clients. */
+  sessions: SessionEntry[];
+  serviceTypes: ServiceType[];
+  today: string;
 }
 
 type One<T> = T | T[] | null;
@@ -140,6 +150,9 @@ export async function getClinicianDetail(id: string): Promise<{ ok: true; detail
         return m.state === "accepted" && f ? [{ family_id: m.family_id, name: clientName(m), status: f.status }] : [];
       }),
       activity: await loadActivity(supabase, "clinician", id, names),
+      sessions: await loadSessions(supabase, "clinician_id", id),
+      serviceTypes: await loadServiceTypes(supabase),
+      today: todayInAustralia(),
     },
   };
 }
@@ -183,4 +196,24 @@ export async function saveClinicianTargets(_prev: ActionState, fd: FormData): Pr
   if (!a.data?.length || !b.data?.length) return { error: "Only admins can change targets" };
   revalidatePath("/clinicians");
   return { ok: true, message: "Targets saved" };
+}
+
+/**
+ * "New clinician": staff add a clinician. Same checks and server-only function as the public "Join" form,
+ * so they get the same welcome email with their intake-call booking link and their Perch page.
+ */
+export async function createClinician(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const viewer = await requireStaff();
+  const raw = formDataToObject(fd, ["interests"]);
+  const parsed = applicationSchema.safeParse(raw);
+  if (!parsed.success) return { error: "Please check the highlighted fields.", fieldErrors: fieldErrors(parsed.error), values: raw };
+  const v = parsed.data;
+  const geo = await geocodeSuburb(v.suburb, v.postcode);
+  const { error } = await createAdminClient({ staffId: viewer.userId }).rpc("submit_application", { p: { ...v, lat: geo?.lat ?? null, lng: geo?.lng ?? null } });
+  if (error) {
+    return { error: error.code === "23505" ? "There's already a clinician with this email address." : friendlyError(error), values: raw };
+  }
+  after(drainOutboxQuietly);
+  revalidatePath("/clinicians");
+  return { ok: true, message: `${v.name} added. They've been emailed their welcome with the links to book an intake call and set up their page.` };
 }

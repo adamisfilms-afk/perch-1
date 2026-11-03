@@ -22,6 +22,7 @@ import {
   type CredentialType,
 } from "@/lib/domain";
 import { formatAuMobile } from "@/lib/phone";
+import { DangerZone } from "@/components/workspace/danger-zone";
 import { RecentActivity } from "@/components/workspace/recent-activity";
 import { loadActivity } from "@/lib/server/activity";
 import { createClient } from "@/lib/supabase/server";
@@ -368,6 +369,16 @@ export default async function ClinicianPage({ params, searchParams }: PageProps<
             <RecentActivity items={activity.filter((a) => a.source === "event").slice(0, 8)} />
           </Card>
         </div>
+      </div>
+      <div className="max-w-4xl pt-4">
+        <DangerZone
+          title="Delete this clinician"
+          description="Permanently deletes the clinician, their documents and uploaded files, hours, referrals and bookings, and the messages we sent them. Clients they were offered or matched with go back to Ready to match. Clinicians with sessions logged or active clients can't be deleted: off-board them instead."
+          buttonLabel="Delete clinician"
+          confirmName={clinician.name}
+          action={actions.deleteClinician.bind(null, id)}
+          allowed={viewer.role === "admin"}
+        />
       </div>
       </div>
     </div>
