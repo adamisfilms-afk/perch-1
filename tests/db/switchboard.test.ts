@@ -343,7 +343,8 @@ d("database", () => {
       const [{ id }] = await as("clinician", "select public.submit_application($1) as id", [
         JSON.stringify({ name: "Lana Logged", email: "lana.logged@example.com", mobile: "+61400111555", profession: "speech_pathologist", experience_years: 3, suburb: "Carlton", postcode: "3053" }),
       ]) as { id: string }[];
-      await as("clinician", "select public.book_appointment('clinician_intake', $1, now() + interval '4 days', 30, $2)", [id, coordinator]);
+      // hosted by the admin, so it can't clash with the other booking tests' times (they use the coordinator and lead)
+      await as("clinician", "select public.book_appointment('clinician_intake', $1, now() + interval '4 days', 30, $2)", [id, admin]);
       await as("clinician", "select public.record_clinician_upload($1, 'wwcc', '123', '2031-01-01', $2)", [id, `${id}/wwcc.pdf`]);
       const [{ cred }] = await db.q<{ cred: string }>(POSTGRES, "select id as cred from public.credentials where clinician_id = $1", [id]);
       await db.q(user(coordinator), "select public.verify_credential($1, false, 'Blurry photo')", [cred]);
@@ -353,7 +354,7 @@ d("database", () => {
       const find = (kind: string) => log.find((e) => e.kind === kind);
       expect(find("signed_up")?.actor_kind).toBe("clinician");
       expect(find("call_booked")).toMatchObject({ actor_kind: "clinician" });
-      expect(find("call_booked")?.summary).toMatch(/^Intake call booked for .+ with Casey Coordinator$/);
+      expect(find("call_booked")?.summary).toMatch(/^Intake call booked for .+ with Adam Admin$/);
       expect(log.find((e) => e.kind === "status" && e.detail.to === "screening")).toMatchObject({ actor_kind: "clinician", detail: { from: "applied" } });
       expect(find("document_uploaded")).toMatchObject({ actor_kind: "clinician", detail: { type: "wwcc" } });
       expect(find("document_rejected")).toMatchObject({ actor_kind: "staff", actor_id: coordinator, detail: { reason: "Blurry photo" } });
