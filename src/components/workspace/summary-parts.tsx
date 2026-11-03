@@ -97,15 +97,6 @@ export function RecordHeader({
   );
 }
 
-/** The dark button in a summary header (e.g. "New contact"). */
-export function HeaderButton({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <Link href={href} className="inline-flex min-h-8 items-center whitespace-nowrap rounded-md bg-neutral-950 px-4 text-sm font-medium text-white hover:bg-neutral-800">
-      {children}
-    </Link>
-  );
-}
-
 /** The grey band of key numbers under the header. */
 export function KpiBand({ children }: { children: ReactNode }) {
   return (

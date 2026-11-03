@@ -1,4 +1,4 @@
-import { HeaderButton, SummaryHeader, SummaryKpiBand } from "@/components/workspace/summary-parts";
+import { SummaryHeader, SummaryKpiBand } from "@/components/workspace/summary-parts";
 import { TargetsButton } from "@/components/workspace/targets-modal";
 import { requireStaff } from "@/lib/auth";
 import {
@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { firstOf } from "@/lib/types";
 import { saveClientTargets } from "./actions";
 import { ClientTable } from "./client-table";
+import { NewContactButton } from "./new-contact";
 
 export const metadata = { title: "Client summary" };
 
@@ -77,7 +78,7 @@ export default async function ClientsPage() {
         countTitle="Clients still moving through onboarding"
         actions={
           <>
-            <HeaderButton href="/enquire">New contact</HeaderButton>
+            <NewContactButton />
             <TargetsButton
               title="Client summary settings"
               stepHelp="Hours a client can wait in a step before moving on. Longer waits show in red in the Elapsed column and raise the dashboard's stale alerts. Leave blank for no target."

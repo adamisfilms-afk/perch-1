@@ -5,10 +5,10 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-export type LinkKind = "signup_call" | "clinician_intake" | "intro_call" | "clinician" | "referral";
+export type LinkKind = "signup_call" | "clinician_intake" | "intro_call" | "clinician" | "referral" | "sessions_check";
 export type BookingLinkKind = "signup_call" | "clinician_intake" | "intro_call";
 
-const PREFIX: Record<LinkKind, string> = { signup_call: "s", clinician_intake: "c", intro_call: "i", clinician: "a", referral: "r" };
+const PREFIX: Record<LinkKind, string> = { signup_call: "s", clinician_intake: "c", intro_call: "i", clinician: "a", referral: "r", sessions_check: "k" };
 const VERSIONED: LinkKind[] = ["clinician", "referral"];
 const KIND_BY_PREFIX = Object.fromEntries(Object.entries(PREFIX).map(([k, p]) => [p, k])) as Record<string, LinkKind>;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -64,4 +64,9 @@ export function clinicianPath(secret: string, clinicianId: string, version: numb
 /** One referral, for the clinician it was offered to: accept or decline, then the intro call and first session. */
 export function referralPath(secret: string, matchId: string, version: number): string {
   return `/referral/${makeLinkToken(secret, "referral", matchId, version)}`;
+}
+
+/** A family's monthly "is this the right number of sessions?" check. */
+export function sessionsCheckPath(secret: string, confirmationId: string): string {
+  return `/check/${makeLinkToken(secret, "sessions_check", confirmationId)}`;
 }

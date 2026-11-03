@@ -1,6 +1,7 @@
 // The tabs of a client's record (Info, Bookings, History), shared by the summary modal and the full record page.
 import { AllocateClinician } from "@/components/workspace/allocate-clinician";
 import { CopyLink } from "@/components/workspace/copy-link";
+import { SessionLog } from "@/components/session-log";
 import { ActivityList } from "@/components/workspace/activity-list";
 import { BookingList, Empty, Facts, Section, type Booking } from "@/components/workspace/detail-parts";
 import { CLIENT_STATUS_LABELS, allocationBlockedReason, childFullName } from "@/lib/client-summary";
@@ -16,7 +17,7 @@ import {
 } from "@/lib/domain";
 import { formatAuMobile } from "@/lib/phone";
 import { ageFrom, formatDate, formatDateTime } from "@/lib/time";
-import type { ClientDetail } from "./actions";
+import { logSessionForClient, voidSessionForClient, type ClientDetail } from "./actions";
 
 export const CLIENT_TABS = [
   { id: "info", label: "Info" },
@@ -127,9 +128,37 @@ export function ClientBookings({ detail }: { detail: ClientDetail }) {
         </Section>
       )}
       <BookingList bookings={detail.bookings} now={detail.loadedAt} formatAt={bookingTime} />
+      <Section title="Sessions">
+        {detail.sessions.length === 0 && !detail.liveMatchId ? (
+          <Empty>No sessions yet. They&apos;re logged once a clinician is allocated.</Empty>
+        ) : (
+          <SessionLog
+            types={detail.serviceTypes}
+            sessions={detail.sessions}
+            logAction={detail.liveMatchId ? logSessionForClient.bind(null, detail.liveMatchId) : undefined}
+            voidAction={voidSessionForClient}
+            today={detail.today}
+          />
+        )}
+      </Section>
+      {detail.confirmations.length > 0 && (
+        <Section title="Monthly checks with the family">
+          <Facts
+            items={detail.confirmations.map((c) => [
+              formatMonth(c.month),
+              <span key={c.id} className={c.status === "disputed" ? "text-red-800" : undefined}>
+                {c.session_count} session{c.session_count === 1 ? "" : "s"} ·{" "}
+                {c.status === "confirmed" ? "confirmed" : c.status === "disputed" ? `not right: ${c.note ?? ""}` : "waiting for their answer"}
+              </span>,
+            ])}
+          />
+        </Section>
+      )}
     </div>
   );
 }
+
+const formatMonth = (ymd: string) => new Intl.DateTimeFormat("en-AU", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${ymd}T00:00:00Z`));
 
 /** Every clinician they've been offered, then everything that's happened (the record of their activity on Perch). */
 export function ClientHistory({ detail }: { detail: ClientDetail }) {

@@ -16,7 +16,7 @@ import {
   type ServiceType,
   type TimeBlock,
 } from "../domain";
-import { bookingPath, clinicianPath, referralPath } from "../booking/links";
+import { bookingPath, clinicianPath, referralPath, sessionsCheckPath } from "../booking/links";
 import { formatAuMobile } from "../phone";
 import { formatDate, formatDateTime } from "../time";
 
@@ -64,6 +64,7 @@ export function buildVariables(payload: Record<string, unknown>, links: LinkConf
     }
     if (str("referral_match_id")) v.record_url = v.referral_url;
   }
+  if (str("confirmation_id")) v.confirm_url = links.appUrl + sessionsCheckPath(links.linkSecret, str("confirmation_id")!);
   // Messages about a booked call link back to that booking's page.
   const kind = str("appointment_kind");
   const bookedClinician = str("booked_clinician_id");

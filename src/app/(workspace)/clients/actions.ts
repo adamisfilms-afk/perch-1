@@ -10,7 +10,11 @@ import type { Profession } from "@/lib/domain";
 import { drainOutboxQuietly } from "@/lib/notifications/outbox";
 import { bookingUrl } from "@/lib/server/booking";
 import { loadActivity, type ActivityEntry } from "@/lib/server/activity";
+import { loadConfirmations, loadServiceTypes, loadSessions, type ConfirmationEntry, type ServiceType, type SessionEntry } from "@/lib/server/sessions";
+import { todayInAustralia } from "@/lib/time";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { enquirySchema, fieldErrors, formDataToObject } from "@/lib/validation";
 import { firstOf, type ChildRow, type FamilyRow } from "@/lib/types";
 
 export interface ClientDetail {
@@ -41,6 +45,12 @@ export interface ClientDetail {
   loadedAt: number;
   /** Booking pages staff can send by text or email, when that call can be booked. */
   links: { signupCall: string | null; introCall: string | null };
+  /** The session log, and the referral sessions can be logged against (the allocated clinician's), if any. */
+  sessions: SessionEntry[];
+  confirmations: ConfirmationEntry[];
+  serviceTypes: ServiceType[];
+  liveMatchId: string | null;
+  today: string;
 }
 
 /** Everything about one client, for the summary modal. Reads as the signed-in user, so RLS applies, and logs the view. */
@@ -132,6 +142,11 @@ export async function getClientDetail(id: string): Promise<{ ok: true; detail: C
         };
       }),
       activity: await loadActivity(supabase, "family", id, names),
+      sessions: await loadSessions(supabase, "family_id", id),
+      confirmations: await loadConfirmations(supabase, id),
+      serviceTypes: await loadServiceTypes(supabase),
+      liveMatchId: matchRows.find((m) => m.state === "accepted")?.id ?? null,
+      today: todayInAustralia(),
       bookings,
       loadedAt: Date.now(),
       links: {
@@ -234,4 +249,43 @@ export async function allocateClinician(familyId: string, clinicianId: string): 
   revalidatePath(`/families/${familyId}`);
   after(drainOutboxQuietly);
   return { ok: true };
+}
+
+/** Staff log a session for a client (e.g. one the clinician forgot). */
+export async function logSessionForClient(matchId: string, _prev: ActionState, fd: FormData): Promise<ActionState> {
+  await requireStaff();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("log_session", {
+    p_match: matchId,
+    p_date: String(fd.get("date") ?? "") || null,
+    p_service_type: String(fd.get("service_type") ?? ""),
+  });
+  if (error) return { ok: false, error: friendlyError(error) };
+  revalidatePath("/clients");
+  return { ok: true, message: "Session logged" };
+}
+
+export async function voidSessionForClient(sessionId: string, reason: string): Promise<ActionState> {
+  await requireStaff();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("void_session", { p_session: sessionId, p_reason: reason });
+  if (error) return { ok: false, error: friendlyError(error) };
+  revalidatePath("/clients");
+  return { ok: true };
+}
+
+/**
+ * "New contact": staff add a family (for example after a phone enquiry). Same checks and the same
+ * server-only function as the public enquiry form, so the family gets the same email with their sign-up call link.
+ */
+export async function createContact(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const viewer = await requireStaff();
+  const raw = formDataToObject(fd, ["concerns", "preferred_times"]);
+  const parsed = enquirySchema.safeParse(raw);
+  if (!parsed.success) return { error: "Please check the highlighted fields.", fieldErrors: fieldErrors(parsed.error), values: raw };
+  const { error } = await createAdminClient({ staffId: viewer.userId }).rpc("submit_enquiry", { p: parsed.data });
+  if (error) return { error: friendlyError(error), values: raw };
+  after(drainOutboxQuietly);
+  revalidatePath("/clients");
+  return { ok: true, message: `${parsed.data.parent_name} added. They've been emailed a link to book their sign-up call.` };
 }

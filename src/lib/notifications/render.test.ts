@@ -32,6 +32,11 @@ describe("message rendering", () => {
     expect(buildVariables({ match_id: FAMILY, family_id: FAMILY }, links).referral_url).toBeUndefined();
   });
 
+  it("links the monthly session check", () => {
+    const v = buildVariables({ confirmation_id: FAMILY, family_id: FAMILY }, links);
+    expect(tokenOf(v.confirm_url, "/check/")).toEqual({ kind: "sessions_check", id: FAMILY, version: null });
+  });
+
   it("writes the referral summary and, once accepted, the family's details", () => {
     const summary = { child_age: 5, suburb: "Newtown", service_type: "speech", funding_type: "private", concerns: ["speech_sounds"], preferred_times: [] };
     const offer = buildVariables(summary, links);

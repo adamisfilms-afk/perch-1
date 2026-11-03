@@ -392,6 +392,100 @@ d("database", () => {
     });
   });
 
+  describe("sessions", () => {
+    // sessions are dated in Sydney time, which can be a day ahead of the server's date
+    const SYDNEY_TODAY = "(now() at time zone 'Australia/Sydney')::date";
+    const matched = async () => {
+      const a = await db.createActiveClinician({ name: "Session Sam" });
+      const { familyId } = await db.createReadyFamily();
+      const [{ match }] = await db.q<{ match: string }>(user(coordinator), "select public.allocate_clinician($1, $2) as match", [familyId, a.clinicianId]);
+      await db.q(SERVICE, "select public.respond_to_referral($1, true)", [match]);
+      return { ...a, familyId, match };
+    };
+    const log = (match: string, date: "today" | "yesterday", type = "standard_45") =>
+      db.q(SERVICE, `select public.log_session($1, ${SYDNEY_TODAY} - ${date === "today" ? 0 : 1}, $2) as id`, [match, type]);
+
+    it("logs sessions from the referral link, and the first one confirms the first session", async () => {
+      const { familyId, match } = await matched();
+      const [{ id }] = await log(match, "today") as { id: string }[];
+      expect(await db.familyStatus(familyId)).toBe("converted");
+      const [row] = await db.q<{ price_cents: number; funding_type: string; logged_by: string }>(POSTGRES, "select price_cents, funding_type, logged_by from public.sessions where id = $1", [id]);
+      expect(row).toEqual({ price_cents: 14549, funding_type: "private", logged_by: "clinician" });
+
+      await expect(log(match, "today")).rejects.toThrow(/already logged/);
+      await expect(db.q(SERVICE, `select public.log_session($1, ${SYDNEY_TODAY} + 1, 'standard_45')`, [match])).rejects.toThrow(/on or after the day/);
+      await expect(log(match, "yesterday", "nonsense")).rejects.toThrow(/type of session/);
+      await log(match, "yesterday", "standard_60");
+      await expect(db.q(ANON, "select public.log_session($1, current_date, 'standard_45')", [match])).rejects.toThrow(/permission denied/);
+
+      // removing one needs a reason, and only the clinician who logged it (or staff)
+      await expect(db.q(SERVICE, "select public.void_session($1, '', null)", [id])).rejects.toThrow(/Not allowed|reason/);
+      const [{ clinician_id }] = await db.q<{ clinician_id: string }>(POSTGRES, "select clinician_id from public.sessions where id = $1", [id]);
+      await db.q(SERVICE, "select public.void_session($1, 'Logged twice', $2)", [id, clinician_id]);
+      const kinds = (await db.q<{ kind: string }>(POSTGRES, "select kind from public.activity_log where entity_type = 'family' and entity_id = $1", [familyId])).map((k) => k.kind);
+      expect(kinds).toEqual(expect.arrayContaining(["session_logged", "session_voided"]));
+    });
+
+    it("asks each active family to confirm last month, and tells staff when it's not right", async () => {
+      const { familyId, match, clinicianId } = await matched();
+      await db.q(POSTGRES, "insert into public.conversions (match_id, first_session_at) values ($1, date_trunc('month', current_date) - interval '20 days')", [match]);
+      await db.q(POSTGRES, "update public.families set status = 'converted' where id = $1", [familyId]);
+      await db.q(POSTGRES, "insert into public.sessions (match_id, family_id, clinician_id, session_date, service_type, price_cents, funding_type, logged_by) values ($1, $2, $3, date_trunc('month', current_date) - interval '10 days', 'standard_45', 14549, 'private', 'clinician')", [match, familyId, clinicianId]);
+      const month = "date_trunc('month', current_date - interval '1 month')::date";
+      await db.q(POSTGRES, `select private.send_session_confirmations(${month})`);
+      await db.q(POSTGRES, `select private.send_session_confirmations(${month})`); // once only
+      const confirmations = await db.q<{ id: string; session_count: number }>(POSTGRES, "select id, session_count from public.session_confirmations where match_id = $1", [match]);
+      expect(confirmations.map((c) => c.session_count)).toEqual([1]);
+      const sent = await db.q<{ channel: string }>(POSTGRES, "select channel from public.message_log where template = 'sessions_monthly_check' and recipient_id = $1", [familyId]);
+      expect(sent.map((m) => m.channel).sort()).toEqual(["email", "sms"]);
+
+      await expect(db.q(SERVICE, "select public.respond_session_confirmation($1, false, '')", [confirmations[0].id])).rejects.toThrow(/what's different/);
+      await db.q(SERVICE, "select public.respond_session_confirmation($1, false, 'We had two sessions')", [confirmations[0].id]);
+      expect(await db.q(POSTGRES, "select 1 from public.message_log where template = 'sessions_disputed' and payload->>'family_id' = $1", [familyId])).toHaveLength(2);
+      await expect(db.q(user(coordinator), "select public.respond_session_confirmation($1, true)", [confirmations[0].id])).rejects.toThrow(/permission denied/);
+    });
+
+    it("flags an active client with no sessions for three weeks, once", async () => {
+      const { familyId, match } = await matched();
+      await db.q(POSTGRES, "insert into public.conversions (match_id, first_session_at) values ($1, current_date - 30)", [match]);
+      await db.q(POSTGRES, "update public.families set status = 'converted' where id = $1", [familyId]);
+      await db.q(SERVICE, "select public.run_scheduled_jobs('sessions')");
+      await db.q(SERVICE, "select public.run_scheduled_jobs('sessions')");
+      expect(await db.q(POSTGRES, "select 1 from public.message_log where template = 'session_gap' and payload->>'family_id' = $1", [familyId])).toHaveLength(2); // email and Slack, once
+    });
+  });
+
+  describe("deleting records", () => {
+    it("lets only admins delete a client, and not once sessions are logged", async () => {
+      const familyId = await db.submitEnquiry();
+      await expect(db.q(user(coordinator), "select public.delete_family($1)", [familyId])).rejects.toThrow(/Only an admin/);
+      await db.q(user(admin), "select public.delete_family($1)", [familyId]);
+      expect(await db.q(POSTGRES, "select 1 from public.families where id = $1", [familyId])).toHaveLength(0);
+      expect(await db.q(POSTGRES, "select 1 from public.message_log where recipient_id = $1", [familyId])).toHaveLength(0);
+      const [note] = await db.q<{ actor_id: string }>(POSTGRES, "select actor_id from public.activity_log where entity_id = $1 and kind = 'deleted'", [familyId]);
+      expect(note.actor_id).toBe(admin);
+
+      const a = await db.createActiveClinician();
+      const { familyId: active } = await db.createReadyFamily();
+      const [{ match }] = await db.q<{ match: string }>(user(coordinator), "select public.allocate_clinician($1, $2) as match", [active, a.clinicianId]);
+      await db.q(SERVICE, "select public.respond_to_referral($1, true)", [match]);
+      await db.q(SERVICE, "select public.log_session($1, (now() at time zone 'Australia/Sydney')::date, 'standard_45')", [match]);
+      await expect(db.q(user(admin), "select public.delete_family($1)", [active])).rejects.toThrow(/sessions logged/);
+      await expect(db.q(user(admin), "select public.delete_clinician($1)", [a.clinicianId])).rejects.toThrow(/sessions or fee statements|seeing clients/);
+    });
+
+    it("deletes a clinician, returns their files and sends their clients back to Ready to match", async () => {
+      const a = await db.createActiveClinician({ name: "Gone Soon" });
+      await db.q(POSTGRES, "insert into public.credentials (clinician_id, type, status, expires_at, file_path) values ($1, 'cv', 'pending', null, $2)", [a.clinicianId, `${a.clinicianId}/cv.pdf`]);
+      const { familyId } = await db.createReadyFamily();
+      await db.q(user(coordinator), "select public.allocate_clinician($1, $2)", [familyId, a.clinicianId]);
+      const [{ files }] = await db.q<{ files: string[] }>(user(admin), "select public.delete_clinician($1) as files", [a.clinicianId]);
+      expect(files).toEqual([`${a.clinicianId}/cv.pdf`]);
+      expect(await db.familyStatus(familyId)).toBe("ready_to_match");
+      expect(await db.q(POSTGRES, "select 1 from public.clinicians where id = $1", [a.clinicianId])).toHaveLength(0);
+    });
+  });
+
   describe("clinician sign-up", () => {
     it("goes from sign-up to application, intake call and ready", async () => {
       const { id } = await db.one<{ id: string }>(SERVICE, "select public.submit_application($1) as id", [

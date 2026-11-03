@@ -179,3 +179,13 @@ export async function confirmFirstSessionOnBehalf(familyId: string, matchId: str
   if (error) return { error: friendlyError(error) };
   doneAndShow(familyId, "converted");
 }
+
+/** Admins only: delete the client and everything that belongs to them (see public.delete_family). */
+export async function deleteClient(familyId: string): Promise<ActionState> {
+  await requireStaff(["admin"]);
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_family", { p_family: familyId });
+  if (error) return { error: friendlyError(error) };
+  revalidatePath("/clients");
+  redirect("/clients");
+}
